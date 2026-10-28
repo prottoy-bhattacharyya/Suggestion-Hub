@@ -14,7 +14,7 @@ export function SiteHeader() {
     <header className="sticky top-0 z-30 border-b border-border bg-background/90 backdrop-blur">
       <div className="mx-auto flex h-16 max-w-6xl items-center gap-6 px-4">
         <Link to="/" className="font-display text-xl font-semibold">
-          Margin<span className="text-highlight">.</span>
+          Suggesion Hub<span className="text-highlight">.</span>
         </Link>
         <nav className="hidden gap-1 md:flex">
           {nav.map((n) => (
@@ -23,14 +23,7 @@ export function SiteHeader() {
             </Link>
           ))}
         </nav>
-        <div className="ml-auto flex items-center gap-3">
-          <button aria-label="Notifications" className="relative rounded-md p-2 hover:bg-secondary">
-            <Bell className="h-5 w-5" />
-            <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-highlight" />
-          </button>
-          <Link to="/profile/$id" params={{ id: "u1" }} className="grid h-9 w-9 place-items-center rounded-full bg-primary text-sm font-semibold text-primary-foreground">PV</Link>
-          <Link to="/login" className="btn-ghost hidden sm:inline-flex">Log out</Link>
-        </div>
+        
       </div>
     </header>
   );

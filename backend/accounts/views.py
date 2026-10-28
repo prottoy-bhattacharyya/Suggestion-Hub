@@ -71,7 +71,7 @@ def login(request):
     if not request.method == 'POST':
         return JsonResponse({"error": "Invalid request method."}, status=405)
 
-    if request.session.get('email'):
+    if request.session.get('user'):
         return JsonResponse(
             {
                 "status": "redirect",
@@ -86,11 +86,71 @@ def login(request):
     email = data.get("email")
     password = data.get("password")
 
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor(dictionary=True)
 
-    request.session['email'] = email
-    return JsonResponse(
-        {
-            "status": "success", 
-            "message": "Login successful."
-        }, 
-    status=200)
+        query = "SELECT * FROM users WHERE email = %s AND password = %s"
+        cursor.execute(query, (email, password))
+        user = cursor.fetchone()
+
+    except Exception as e:
+        return JsonResponse(
+            {
+                "status": "error",
+                "message": str(e),
+            },
+            status=401,
+        )
+
+    if not user:
+        return JsonResponse(
+            {
+                "status": "error",
+                "message": "Invalid email or password.",
+            },
+            status=401,
+        )
+    if not user['is_active']:
+        return JsonResponse(
+            {
+                "status": "error",
+                "message": "Account is inactive. Please contact support.",
+            },
+            status=403,
+        )
+    if user["role"] == "student":
+        response_data = {
+            "status": "success",
+            "message": "Login successful.",
+            "user": {
+                "id": user['id'],
+                "email": user['email'],
+                "full_name": user['full_name'],
+                "role": user['role'],
+                "student_id": user['student_id'],
+                "department_id": user['department_id'],
+                "intake": user['intake'],
+                "section": user['section'],
+            }
+        }
+    if user["role"] == "teacher":
+        response_data = {
+            "status": "success",
+            "message": "Login successful.",
+            "user": {
+                "id": user['id'],
+                "email": user['email'],
+                "full_name": user['full_name'],
+                "role": user['role'],
+                "department_id": user["department_id"],
+                "designation": user["designation"],
+                "employee_id": user["employee_id"],
+            }
+        }
+
+    
+    request.session['user'] = response_data["user"]
+    print(response_data["user"])
+    
+    return JsonResponse(response_data, status=200)

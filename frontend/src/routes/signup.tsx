@@ -1,5 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import axios from "axios";
+
 import {
   MailCheck,
   Eye,
@@ -30,16 +32,93 @@ export const Route = createFileRoute("/signup")({
 
 type AccountType = "student" | "teacher";
 
+type Department = {
+  id: number;
+  name: string;
+  code: string;
+};
+
 function Signup() {
+  // Account and submission state
   const [sent, setSent] = useState(false);
   const [accountType, setAccountType] = useState<AccountType>("student");
 
+  // Department API state
+  const [departments, setDepartments] = useState<Department[]>([]);
+  const [departmentsLoading, setDepartmentsLoading] = useState(true);
+  const [departmentError, setDepartmentError] = useState("");
+
+  // Password state
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
-
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
 
+  // Form submission state
+  const [loading, setLoading] = useState(false);
+  const [submitError, setSubmitError] = useState("");
+
+  // Fetch departments from the backend
+  useEffect(() => {
+    const controller = new AbortController();
+
+    async function fetchDepartments() {
+      try {
+        setDepartmentsLoading(true);
+        setDepartmentError("");
+
+        // CSRF token request (if your Django backend uses CSRF protection)
+        const csrfResponse = await axios.get("http://localhost:8000/accounts/csrf/", {
+          withCredentials: true,
+        });
+
+        const response = await fetch(
+          "http://localhost:8000/academics/departments_list/",
+          {
+            method: "GET",
+            headers: {
+              Accept: "application/json",
+              "X-CSRFToken": csrfResponse.data.csrfToken, // Include CSRF token if needed
+            },
+            signal: controller.signal,
+          }
+        );
+
+        if (!response.ok) {
+          throw new Error(
+            `Failed to load departments. HTTP status: ${response.status}`
+          );
+        }
+
+        const data: { departments: Department[] } =
+          await response.json();
+
+        if (!Array.isArray(data.departments)) {
+          throw new Error("Invalid department data received from the server.");
+        }
+
+        setDepartments(data.departments);
+      } catch (error) {
+        if (error instanceof Error && error.name !== "AbortError") {
+          setDepartmentError(
+            error.message ||
+              "Unable to load departments. Please try again."
+          );
+        }
+      } finally {
+        if (!controller.signal.aborted) {
+          setDepartmentsLoading(false);
+        }
+      }
+    }
+
+    fetchDepartments();
+
+    return () => controller.abort();
+  }, []);
+
+
+  // Password requirements
   const passwordRequirements = [
     {
       label: "At least 8 characters",
@@ -70,15 +149,96 @@ function Signup() {
   const passwordsMatch =
     confirmPassword.length > 0 && password === confirmPassword;
 
+  
+  // Handle form submission
+
+  async function handleSignup(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setSubmitError("");
+
+    if (!isStrongPassword || !passwordsMatch) {
+      setSubmitError("Please check your password and try again.");
+      return;
+    }
+
+    const form = event.currentTarget;
+    const formData = new FormData(form);
+
+    const payload = {
+      accountType,
+      fullName: String(formData.get("fullName") ?? "").trim(),
+      email: String(formData.get("email") ?? "").trim(),
+      password,
+      confirmPassword,
+
+      // Student information
+      studentId: String(formData.get("studentId") ?? ""),
+      departmentId: String(formData.get("departmentId") ?? ""),
+      intake: String(formData.get("intake") ?? ""),
+      section: String(formData.get("section") ?? ""),
+
+      // Teacher information
+      employeeId: String(formData.get("employeeId") ?? ""),
+      designation: String(formData.get("designation") ?? ""),
+    };
+
+    // CSRF token request (if your Django backend uses CSRF protection)
+    const csrfResponse = await axios.get("http://localhost:8000/accounts/csrf/", {
+      withCredentials: true,
+    });
+
+    // sign up request
+    try {
+      setLoading(true);
+
+      const response = await fetch(
+        "http://localhost:8000/accounts/signup/",
+        {
+          method: "POST",
+          credentials: "include", // Include cookies for session authentication
+          headers: {
+            "Content-Type": "application/json",
+            Accept: "application/json",
+            "X-CSRFToken": csrfResponse.data.csrfToken, // Include CSRF token if needed
+          },
+          body: JSON.stringify(payload),
+        }
+      );
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        const message = Array.isArray(data.error)
+          ? data.error.join(" ")
+          : data.error || "Registration failed.";
+
+        throw new Error(message);
+      }
+
+      setSent(true);
+    } catch (error) {
+      setSubmitError(
+        error instanceof Error
+          ? error.message
+          : "Unable to connect to the server."
+      );
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  // Verification confirmation screen
   if (sent) {
     return (
       <div className="mx-auto max-w-md px-4 py-24 text-center">
         <MailCheck className="mx-auto h-12 w-12 text-primary" />
 
-        <h1 className="mt-4 text-3xl">Check your inbox</h1>
+        <h1 className="mt-4 text-3xl font-semibold">
+          Check your inbox
+        </h1>
 
         <p className="mt-2 text-muted-foreground">
-          Your registration request has been submitted.
+          Your registration form was submitted locally.
           {accountType === "teacher"
             ? " Teacher accounts require administrative approval."
             : " Check your university email for verification instructions."}
@@ -170,17 +330,7 @@ function Signup() {
       <form
         key={accountType}
         className="paper-card mt-6 grid gap-4 p-6 sm:grid-cols-2"
-        onSubmit={(e) => {
-          e.preventDefault();
-
-          if (!isStrongPassword || !passwordsMatch) {
-            return;
-          }
-
-          // Connect your authentication API here.
-          // Send accountType along with the submitted form data.
-          setSent(true);
-        }}
+        onSubmit={handleSignup}
       >
         {/* Full name */}
         <div className="sm:col-span-2">
@@ -191,6 +341,7 @@ function Signup() {
           <input
             id="fullName"
             name="fullName"
+            type="text"
             className="field w-full"
             placeholder="Enter your full name"
             autoComplete="name"
@@ -207,8 +358,8 @@ function Signup() {
           <input
             id="email"
             name="email"
-            className="field w-full"
             type="email"
+            className="field w-full"
             placeholder="you@university.edu"
             autoComplete="email"
             required
@@ -226,6 +377,7 @@ function Signup() {
               <input
                 id="studentId"
                 name="studentId"
+                type="text"
                 className="field w-full"
                 placeholder="Enter student ID"
                 required
@@ -239,14 +391,28 @@ function Signup() {
 
               <select
                 id="studentDepartment"
-                name="department"
+                name="departmentId"
                 className="field w-full"
-                defaultValue="CSE"
+                defaultValue=""
                 required
+                disabled={departmentsLoading || !!departmentError}
               >
-                <option value="CSE">CSE</option>
-                <option value="EEE">EEE</option>
-                <option value="BBA">BBA</option>
+                <option value="" disabled>
+                  {departmentsLoading
+                    ? "Loading departments..."
+                    : departmentError
+                      ? "Failed to load departments"
+                      : "Select your department"}
+                </option>
+
+                {departments.map((department) => (
+                  <option
+                    key={department.id}
+                    value={department.id}
+                  >
+                    {department.name} ({department.code})
+                  </option>
+                ))}
               </select>
             </div>
 
@@ -258,8 +424,9 @@ function Signup() {
               <input
                 id="intake"
                 name="intake"
+                type="text"
                 className="field w-full"
-                placeholder="e.g. 49"
+                placeholder="e.g. 52"
                 required
               />
             </div>
@@ -272,8 +439,9 @@ function Signup() {
               <input
                 id="section"
                 name="section"
+                type="text"
                 className="field w-full"
-                placeholder="e.g. 3"
+                placeholder="e.g. 11"
                 required
               />
             </div>
@@ -291,6 +459,7 @@ function Signup() {
               <input
                 id="employeeId"
                 name="employeeId"
+                type="text"
                 className="field w-full"
                 placeholder="Enter your employee ID"
                 autoComplete="off"
@@ -303,23 +472,34 @@ function Signup() {
             </div>
 
             <div>
-              <label
-                htmlFor="teacherDepartment"
-                className="label-sm"
-              >
+              <label htmlFor="teacherDepartment" className="label-sm">
                 Department
               </label>
 
               <select
                 id="teacherDepartment"
-                name="department"
+                name="departmentId"
                 className="field w-full"
-                defaultValue="CSE"
+                defaultValue=""
                 required
+                disabled={departmentsLoading || !!departmentError}
               >
-                <option value="CSE">CSE</option>
-                <option value="EEE">EEE</option>
-                <option value="BBA">BBA</option>
+                <option value="" disabled>
+                  {departmentsLoading
+                    ? "Loading departments..."
+                    : departmentError
+                      ? "Failed to load departments"
+                      : "Select your department"}
+                </option>
+
+                {departments.map((department) => (
+                  <option
+                    key={department.id}
+                    value={department.id}
+                  >
+                    {department.name} ({department.code})
+                  </option>
+                ))}
               </select>
             </div>
 
@@ -368,6 +548,29 @@ function Signup() {
           </>
         )}
 
+        {/* Department API error */}
+        {departmentError && (
+          <div
+            className="sm:col-span-2 rounded-lg border border-red-500/30 bg-red-500/5 p-3"
+            role="alert"
+          >
+            <p className="text-sm text-red-500">
+              Could not load departments: {departmentError}
+            </p>
+
+            <button
+              type="button"
+              className="mt-2 text-sm font-medium text-primary hover:underline"
+              onClick={() => {
+                // A page refresh reruns the department-loading effect.
+                window.location.reload();
+              }}
+            >
+              Refresh page and try again
+            </button>
+          </div>
+        )}
+
         {/* Password */}
         <div className="sm:col-span-2">
           <label htmlFor="password" className="label-sm">
@@ -382,14 +585,14 @@ function Signup() {
               type={showPassword ? "text" : "password"}
               autoComplete="new-password"
               value={password}
-              onChange={(e) => setPassword(e.target.value)}
+              onChange={(event) => setPassword(event.target.value)}
               aria-describedby="password-requirements"
               required
             />
 
             <button
               type="button"
-              onClick={() => setShowPassword((prev) => !prev)}
+              onClick={() => setShowPassword((previous) => !previous)}
               className="absolute inset-y-0 right-0 flex items-center justify-center px-3 text-muted-foreground transition-colors hover:text-foreground"
               aria-label={
                 showPassword ? "Hide password" : "Show password"
@@ -474,7 +677,9 @@ function Signup() {
               type={showConfirmPassword ? "text" : "password"}
               autoComplete="new-password"
               value={confirmPassword}
-              onChange={(e) => setConfirmPassword(e.target.value)}
+              onChange={(event) =>
+                setConfirmPassword(event.target.value)
+              }
               aria-invalid={
                 confirmPassword.length > 0 && !passwordsMatch
               }
@@ -485,7 +690,7 @@ function Signup() {
             <button
               type="button"
               onClick={() =>
-                setShowConfirmPassword((prev) => !prev)
+                setShowConfirmPassword((previous) => !previous)
               }
               className="absolute inset-y-0 right-0 flex items-center justify-center px-3 text-muted-foreground transition-colors hover:text-foreground"
               aria-label={
@@ -521,18 +726,37 @@ function Signup() {
                 : "✗ Passwords do not match"}
           </p>
         </div>
+        
+        {submitError && (
+          <div
+            className="sm:col-span-2 rounded-lg border border-red-500/30 bg-red-500/5 p-3"
+            role="alert"
+          >
+            <p className="text-sm text-red-500">{submitError}</p>
+          </div>
+        )}
 
-        {/* Submit */}
+        {/* Submit button */}
         <button
           type="submit"
-          disabled={!isStrongPassword || !passwordsMatch}
+          disabled={
+            loading ||
+            !isStrongPassword ||
+            !passwordsMatch ||
+            departmentsLoading ||
+            !!departmentError
+          }
           className="btn-primary sm:col-span-2 disabled:cursor-not-allowed disabled:opacity-50"
         >
-          {accountType === "student"
-            ? "Create student account"
-            : "Register as teacher"}
+          {loading
+            ? "Creating account..."
+            : accountType === "student"
+              ? "Create student account"
+              : "Register as teacher"}
+            
         </button>
 
+        {/* Login link */}
         <p className="sm:col-span-2 text-center text-sm text-muted-foreground">
           Already have an account?{" "}
           <Link

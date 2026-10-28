@@ -1,14 +1,14 @@
 -- =====================================================================
--- Notes and Suggestions Sharing Platform: MySQL schema
+-- Suggestion Hub: Notes and Suggestions Sharing Platform: MySQL schema
 -- Target: MySQL 8.0+ (InnoDB, utf8mb4)
 -- Usage:  mysql -u root -p < schema.sql
 -- =====================================================================
 
-CREATE DATABASE IF NOT EXISTS notes_platform
+CREATE DATABASE IF NOT EXISTS suggestion_hub
   CHARACTER SET utf8mb4
   COLLATE utf8mb4_unicode_ci;
 
-USE notes_platform;
+USE suggestion_hub;
 
 -- Drop in reverse dependency order (safe re-run during development)
 SET FOREIGN_KEY_CHECKS = 0;
@@ -36,31 +36,6 @@ CREATE TABLE departments (
   UNIQUE KEY uq_departments_name (name)
 ) ENGINE=InnoDB;
 
--- ---------------------------------------------------------------------
--- users (students, teachers, admins)
--- ---------------------------------------------------------------------
-CREATE TABLE users (
-  id             INT UNSIGNED NOT NULL AUTO_INCREMENT,
-  email          VARCHAR(254) NOT NULL,
-  password       VARCHAR(255) NOT NULL,              -- hashed (Django)
-  full_name      VARCHAR(150) NOT NULL,
-  role           ENUM('student','teacher','admin') NOT NULL DEFAULT 'student',
-  student_id     VARCHAR(30)  NULL,                  -- students only
-  department_id  INT UNSIGNED NULL,
-  intake         VARCHAR(10)  NULL,                  -- students only
-  section        VARCHAR(10)  NULL,                  -- students only
-  is_verified    TINYINT(1)   NOT NULL DEFAULT 0,    -- email verified
-  is_active      TINYINT(1)   NOT NULL DEFAULT 1,
-  created_at     DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  PRIMARY KEY (id),
-  UNIQUE KEY uq_users_email (email),
-  UNIQUE KEY uq_users_student_id (student_id),       -- multiple NULLs allowed
-  KEY idx_users_role (role),
-  KEY idx_users_dept_intake (department_id, intake, section),
-  CONSTRAINT fk_users_department
-    FOREIGN KEY (department_id) REFERENCES departments (id)
-    ON DELETE SET NULL ON UPDATE CASCADE
-) ENGINE=InnoDB;
 
 -- ---------------------------------------------------------------------
 -- courses
@@ -77,6 +52,38 @@ CREATE TABLE courses (
     FOREIGN KEY (department_id) REFERENCES departments (id)
     ON DELETE RESTRICT ON UPDATE CASCADE
 ) ENGINE=InnoDB;
+
+
+
+-- ---------------------------------------------------------------------
+-- users (students, teachers, admins)
+-- ---------------------------------------------------------------------
+CREATE TABLE users (
+  id             INT UNSIGNED NOT NULL AUTO_INCREMENT,
+  email          VARCHAR(254) NOT NULL,
+  password       VARCHAR(255) NOT NULL,              -- hashed (Django)
+  full_name      VARCHAR(150) NOT NULL,
+  role           ENUM('student','teacher','admin') NOT NULL DEFAULT 'student',
+  student_id     VARCHAR(30)  NULL,                  -- students only
+  department_id  INT UNSIGNED NULL,
+  intake         VARCHAR(10)  NULL,                  -- students only
+  section        VARCHAR(10)  NULL,                  -- students only
+  designation    VARCHAR(100) NULL,                  -- teachers only
+  employee_id    VARCHAR(30)  NULL,                  -- teachers only
+  is_verified    TINYINT(1)   NOT NULL DEFAULT 0,    -- email verified
+  is_active      TINYINT(1)   NOT NULL DEFAULT 1,
+  created_at     DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  UNIQUE KEY uq_users_email (email),
+  UNIQUE KEY uq_users_student_id (student_id),       -- multiple NULLs allowed
+  KEY idx_users_role (role),
+  KEY idx_users_dept_intake (department_id, intake, section),
+  CONSTRAINT fk_users_department
+    FOREIGN KEY (department_id) REFERENCES departments (id)
+    ON DELETE SET NULL ON UPDATE CASCADE
+) ENGINE=InnoDB;
+
+
 
 -- ---------------------------------------------------------------------
 -- teacher_courses (which teacher reviews which course)

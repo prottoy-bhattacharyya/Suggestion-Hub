@@ -1,16 +1,19 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import axios from "axios";
+import { Eye, EyeOff } from "lucide-react";
+import { getCSRFToken } from "@/lib/utils";
+import api from "@/lib/api";
 
 export const Route = createFileRoute("/login")({
   head: () => ({
     meta: [
-      { title: "Log in — Margin" },
+      { title: "Log in — Suggesion Hub" },
       {
         name: "description",
         content: "Log in with your university email.",
       },
-      { property: "og:title", content: "Log in — Margin" },
+      { property: "og:title", content: "Log in — Suggesion Hub" },
       {
         property: "og:description",
         content: "Access verified course notes.",
@@ -24,9 +27,56 @@ function Login() {
   const nav = useNavigate();
 
   const [forgot, setForgot] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [checkingSession, setCheckingSession] = useState(true);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
+
+  // Check whether the user already has an authenticated session.
+  useEffect(() => {
+    let active = true;
+
+    async function checkSession() {
+      try {
+        const csrfToken = await getCSRFToken();
+
+        const response = await api.get("/accounts/me/", {
+          headers: {
+            Accept: "application/json",
+            ...(csrfToken ? { "X-CSRFToken": csrfToken } : {}),
+          },
+        });
+
+        if (!active) return;
+
+        // Use the property name returned by your Django backend.
+        if (response.data.loggedIn || response.data.logedIn) {
+          await nav({ to: "/feeds" });
+        }
+      } catch (err: unknown) {
+        // A failed session check should not prevent manual login.
+        if (axios.isAxiosError(err)) {
+          console.error(
+            "Session check failed:",
+            err.response?.data ?? err.message,
+          );
+        } else {
+          console.error("Session check failed:", err);
+        }
+      } finally {
+        if (active) {
+          setCheckingSession(false);
+        }
+      }
+    }
+
+    void checkSession();
+
+    return () => {
+      active = false;
+    };
+  }, [nav]);
 
   async function handleLogin(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -35,43 +85,16 @@ function Login() {
     setSuccess("");
 
     const formData = new FormData(e.currentTarget);
-
     const email = String(formData.get("email") ?? "").trim();
     const password = String(formData.get("password") ?? "");
 
     try {
       setLoading(true);
 
-      // if (forgot) {
-      //   // Password reset request
-      //   const response = await axios.post(
-      //     "http://localhost:8000/accounts/password-reset/",
-      //     { email },
-      //     {
-      //       headers: {
-      //         "Content-Type": "application/json",
-      //         Accept: "application/json",
-      //       },
-      //     }
-      //   );
+      const csrfToken = await getCSRFToken();
 
-      //   setSuccess(
-      //     response.data.message ||
-      //       "If an account exists for this email, password reset instructions will be sent."
-      //   );
-
-      //   return;
-      // }
-
-      // CSRF token request (if your Django backend uses CSRF protection)
-      const csrfResponse = await axios.get("http://localhost:8000/accounts/csrf/", {
-        withCredentials: true,
-      });
-
-
-      // Login request
-      const response = await axios.post(
-        "http://localhost:8000/accounts/login/",
+      const response = await api.post(
+        "/accounts/login/",
         {
           email,
           password,
@@ -80,33 +103,49 @@ function Login() {
           headers: {
             "Content-Type": "application/json",
             Accept: "application/json",
-            "X-CSRFToken": csrfResponse.data.csrfToken, // Include CSRF token if needed
+            ...(csrfToken ? { "X-CSRFToken": csrfToken } : {}),
           },
-          // Keep this if your Django backend uses session authentication.
-          withCredentials: true,
-        }
+        },
       );
 
-      // Save a token if your backend uses token authentication.
-      // Adjust "access" to match your Django response field.
-      if (response.data.access) {
-        localStorage.setItem("access_token", response.data.access);
-      }
+      // Django session authentication normally uses the session cookie.
+      // Do not store a CSRF token as an access token.
+      console.log("Login response:", response.data);
 
       setSuccess("Login successful!");
 
-      // Redirect after successful login.
-      await nav({ to: "/" });
+      await nav({ to: "/feeds" });
     } catch (err: unknown) {
-      if (axios.isAxiosError(err)) {
-        const responseData = err.response?.data;
+      console.error("Login error:", err);
 
-        setError(
-          responseData?.error ||
-            responseData?.detail ||
-            responseData?.message ||
-            "Login failed. Please check your email and password."
-        );
+      if (axios.isAxiosError(err)) {
+        const responseData = err.response?.data as
+          | {
+              error?: string;
+              detail?: string;
+              message?: string;
+              non_field_errors?: string[];
+            }
+          | undefined;
+
+        const backendMessage =
+          responseData?.error ??
+          responseData?.detail ??
+          responseData?.message;
+
+        if (typeof backendMessage === "string") {
+          setError(backendMessage);
+        } else if (Array.isArray(responseData?.non_field_errors)) {
+          setError(responseData.non_field_errors.join(" "));
+        } else if (err.response) {
+          setError(
+            `Login failed (HTTP ${err.response.status}). Please check your credentials.`,
+          );
+        } else {
+          setError(
+            "Cannot connect to the server. Check that Django is running and CORS is configured correctly.",
+          );
+        }
       } else {
         setError("An unexpected error occurred. Please try again.");
       }
@@ -127,10 +166,7 @@ function Login() {
           : "Use your university email."}
       </p>
 
-      <form
-        className="paper-card mt-6 space-y-4 p-6"
-        onSubmit={handleLogin}
-      >
+      <form className="paper-card mt-6 space-y-4 p-6" onSubmit={handleLogin}>
         <div>
           <label htmlFor="email" className="label-sm">
             Email
@@ -153,14 +189,33 @@ function Login() {
               Password
             </label>
 
-            <input
-              id="password"
-              name="password"
-              className="field w-full"
-              type="password"
-              autoComplete="current-password"
-              required
-            />
+            {/* Password field with show/hide toggle */}
+            <div className="relative">
+              <input
+                id="password"
+                name="password"
+                className="field w-full pr-12"
+                type={showPassword ? "text" : "password"}
+                autoComplete="current-password"
+                placeholder="Enter your password"
+                required
+              />
+
+              <button
+                type="button"
+                onClick={() => setShowPassword((previous) => !previous)}
+                className="absolute inset-y-0 right-0 flex items-center justify-center px-3 text-muted-foreground transition-colors hover:text-foreground"
+                aria-label={showPassword ? "Hide password" : "Show password"}
+                aria-pressed={showPassword}
+                title={showPassword ? "Hide password" : "Show password"}
+              >
+                {showPassword ? (
+                  <EyeOff size={20} aria-hidden="true" />
+                ) : (
+                  <Eye size={20} aria-hidden="true" />
+                )}
+              </button>
+            </div>
           </div>
         )}
 
@@ -184,20 +239,23 @@ function Login() {
 
         <button
           type="submit"
-          disabled={loading}
+          disabled={loading || checkingSession}
           className="btn-primary w-full disabled:cursor-not-allowed disabled:opacity-50"
         >
           {loading
             ? "Please wait..."
-            : forgot
-              ? "Send reset link"
-              : "Log in"}
+            : checkingSession
+              ? "Checking session..."
+              : forgot
+                ? "Send reset link"
+                : "Log in"}
         </button>
 
         <button
           type="button"
           onClick={() => {
-            setForgot(!forgot);
+            setForgot((previous) => !previous);
+            setShowPassword(false);
             setError("");
             setSuccess("");
           }}

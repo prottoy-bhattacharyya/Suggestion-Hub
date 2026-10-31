@@ -64,23 +64,27 @@ def signup(request):
         status=201,
     )
 
-    
+def me(request):
+    user = request.session.get('user')
+    if user:
+        return JsonResponse(
+            {
+                "status": "success",
+                "logedIn": True,
+                "user": user
+            },
+            status=200,
+        )
+    return JsonResponse(
+        {
+            "status": "failed",
+            "logedIn": False,
+        }
+    )
 
 
 def login(request):
-    if not request.method == 'POST':
-        return JsonResponse({"error": "Invalid request method."}, status=405)
-
-    if request.session.get('user'):
-        return JsonResponse(
-            {
-                "status": "redirect",
-                "message": "User already logged in. Redirecting to dashboard.",
-                "redirect_url": "/feed",  # Adjust this URL as needed
-            },
-            status=300,
-        )
-
+    
     data = json.loads(request.body)
 
     email = data.get("email")
@@ -154,3 +158,7 @@ def login(request):
     print(response_data["user"])
     
     return JsonResponse(response_data, status=200)
+
+def logout(request):
+    request.session.flush()
+    return JsonResponse({"status": "success", "message": "Logged out."})

@@ -1,6 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import axios from "axios";
+import api, { API_URL } from "@/lib/api";
 
 import {
   MailCheck,
@@ -68,21 +68,16 @@ function Signup() {
         setDepartmentError("");
 
         // CSRF token request (if your Django backend uses CSRF protection)
-        const csrfResponse = await axios.get("http://localhost:8000/accounts/csrf/", {
-          withCredentials: true,
-        });
+        const csrfResponse = await api.get("/accounts/csrf/");
 
-        const response = await fetch(
-          "http://localhost:8000/academics/departments_list/",
-          {
-            method: "GET",
-            headers: {
-              Accept: "application/json",
-              "X-CSRFToken": csrfResponse.data.csrfToken, // Include CSRF token if needed
-            },
-            signal: controller.signal,
-          }
-        );
+        const response = await fetch(`${API_URL}/academics/departments_list/`, {
+          method: "GET",
+          headers: {
+            Accept: "application/json",
+            "X-CSRFToken": csrfResponse.data.csrfToken, // Include CSRF token if needed
+          },
+          signal: controller.signal,
+        });
 
         if (!response.ok) {
           throw new Error(
@@ -183,27 +178,22 @@ function Signup() {
     };
 
     // CSRF token request (if your Django backend uses CSRF protection)
-    const csrfResponse = await axios.get("http://localhost:8000/accounts/csrf/", {
-      withCredentials: true,
-    });
+    const csrfResponse = await api.get("/accounts/csrf/");
 
     // sign up request
     try {
       setLoading(true);
 
-      const response = await fetch(
-        "http://localhost:8000/accounts/signup/",
-        {
-          method: "POST",
-          credentials: "include", // Include cookies for session authentication
-          headers: {
-            "Content-Type": "application/json",
-            Accept: "application/json",
-            "X-CSRFToken": csrfResponse.data.csrfToken, // Include CSRF token if needed
-          },
-          body: JSON.stringify(payload),
-        }
-      );
+      const response = await fetch(`${API_URL}/accounts/signup/`, {
+        method: "POST",
+        credentials: "include", // Include cookies for session authentication
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+          "X-CSRFToken": csrfResponse.data.csrfToken, // Include CSRF token if needed
+        },
+        body: JSON.stringify(payload),
+      });
 
       const data = await response.json();
 

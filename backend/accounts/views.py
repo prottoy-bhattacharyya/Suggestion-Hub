@@ -231,3 +231,89 @@ def profile(request, user_id):
         },
         status=200,
     )
+
+
+def follow(request, user_id):
+    if request.method != "POST":
+        return JsonResponse(
+            {"status": "failed", "error": "Invalid request method."},
+            status=405,
+        )
+
+    session_user = request.session.get('user')
+    if not session_user:
+        return JsonResponse(
+            {"status": "failed", "error": "You need to login first."},
+            status=401,
+        )
+
+    follower_id = session_user.get("id")
+
+    if user_id == follower_id:
+        return JsonResponse(
+            {"status": "failed", "error": "You cannot follow yourself."},
+            status=400,
+        )
+
+    action = "follow"
+    try:
+        body = json.loads(request.body or "{}")
+        if isinstance(body.get("action"), str):
+            action = body["action"]
+    except json.JSONDecodeError:
+        pass
+
+    if action not in ("follow", "unfollow"):
+        return JsonResponse(
+            {"status": "failed", "error": "Invalid action."},
+            status=400,
+        )
+
+    conn = get_db_connection()
+    try:
+        with conn.cursor() as cursor:
+            cursor.execute("SELECT id FROM users WHERE id = %s", (user_id,))
+            if cursor.fetchone() is None:
+                return JsonResponse(
+                    {"status": "failed", "error": "User not found."},
+                    status=404,
+                )
+
+            if action == "follow":
+                cursor.execute(
+                    "INSERT IGNORE INTO follows (follower_id, following_id) VALUES (%s, %s)",
+                    (follower_id, user_id),
+                )
+            else:
+                cursor.execute(
+                    "DELETE FROM follows WHERE follower_id = %s AND following_id = %s",
+                    (follower_id, user_id),
+                )
+            conn.commit()
+
+            cursor.execute(
+                "SELECT COUNT(*) FROM follows WHERE following_id = %s",
+                (user_id,),
+            )
+            follower_count = cursor.fetchone()[0]
+
+            cursor.execute(
+                """
+                SELECT COUNT(*)
+                FROM follows
+                WHERE follower_id = %s AND following_id = %s
+                """,
+                (follower_id, user_id),
+            )
+            is_following = cursor.fetchone()[0] > 0
+
+        return JsonResponse(
+            {
+                "status": "success",
+                "action": action,
+                "is_following": is_following,
+                "follower_count": follower_count,
+            }
+        )
+    finally:
+        conn.close()

@@ -4,6 +4,7 @@ import axios from "axios";
 import { Eye, EyeOff } from "lucide-react";
 import { getCSRFToken } from "@/lib/utils";
 import api from "@/lib/api";
+import { setSessionUser } from "@/lib/auth";
 
 export const Route = createFileRoute("/login")({
   head: () => ({
@@ -109,13 +110,15 @@ function Login() {
       );
 
       // Django session authentication normally uses the session cookie.
-      // Do not store a CSRF token as an access token.
-      console.log("Login response:", response.data);
+      // Store the session user so the header updates without a refresh.
+      setSessionUser(response.data.user);
 
       setSuccess("Login successful!");
-
+      // Notify SiteHeader that the user has logged in.
+      window.dispatchEvent(new Event("auth-change"));
       await nav({ to: "/feeds" });
-    } catch (err: unknown) {
+    } 
+    catch (err: unknown) {
       console.error("Login error:", err);
 
       if (axios.isAxiosError(err)) {

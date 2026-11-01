@@ -11,23 +11,23 @@ CREATE DATABASE IF NOT EXISTS suggestion_hub
 USE suggestion_hub;
 
 -- Drop in reverse dependency order (safe re-run during development)
-SET FOREIGN_KEY_CHECKS = 0;
-DROP TABLE IF EXISTS reports;
-DROP TABLE IF EXISTS notifications;
-DROP TABLE IF EXISTS follows;
-DROP TABLE IF EXISTS ratings;
-DROP TABLE IF EXISTS reviews;
-DROP TABLE IF EXISTS notes;
-DROP TABLE IF EXISTS teacher_courses;
-DROP TABLE IF EXISTS courses;
-DROP TABLE IF EXISTS users;
-DROP TABLE IF EXISTS departments;
-SET FOREIGN_KEY_CHECKS = 1;
+-- SET FOREIGN_KEY_CHECKS = 0;
+-- DROP TABLE IF EXISTS reports;
+-- DROP TABLE IF EXISTS notifications;
+-- DROP TABLE IF EXISTS follows;
+-- DROP TABLE IF EXISTS ratings;
+-- DROP TABLE IF EXISTS reviews;
+-- DROP TABLE IF EXISTS notes;
+-- DROP TABLE IF EXISTS teacher_courses;
+-- DROP TABLE IF EXISTS courses;
+-- DROP TABLE IF EXISTS users;
+-- DROP TABLE IF EXISTS departments;
+-- SET FOREIGN_KEY_CHECKS = 1;
 
 -- ---------------------------------------------------------------------
 -- departments
 -- ---------------------------------------------------------------------
-CREATE TABLE departments (
+CREATE TABLE IF NOT EXISTS departments (
   id    INT UNSIGNED NOT NULL AUTO_INCREMENT,
   name  VARCHAR(150) NOT NULL,
   code  VARCHAR(20)  NOT NULL,
@@ -40,7 +40,7 @@ CREATE TABLE departments (
 -- ---------------------------------------------------------------------
 -- courses
 -- ---------------------------------------------------------------------
-CREATE TABLE courses (
+CREATE TABLE IF NOT EXISTS courses (
   id             INT UNSIGNED NOT NULL AUTO_INCREMENT,
   code           VARCHAR(20)  NOT NULL,              -- e.g. CSE220
   title          VARCHAR(200) NOT NULL,
@@ -58,7 +58,7 @@ CREATE TABLE courses (
 -- ---------------------------------------------------------------------
 -- users (students, teachers, admins)
 -- ---------------------------------------------------------------------
-CREATE TABLE users (
+CREATE TABLE IF NOT EXISTS users (
   id             INT UNSIGNED NOT NULL AUTO_INCREMENT,
   email          VARCHAR(254) NOT NULL,
   password       VARCHAR(255) NOT NULL,              -- hashed (Django)
@@ -88,7 +88,7 @@ CREATE TABLE users (
 -- ---------------------------------------------------------------------
 -- teacher_courses (which teacher reviews which course)
 -- ---------------------------------------------------------------------
-CREATE TABLE teacher_courses (
+CREATE TABLE IF NOT EXISTS teacher_courses (
   id          INT UNSIGNED NOT NULL AUTO_INCREMENT,
   teacher_id  INT UNSIGNED NOT NULL,
   course_id   INT UNSIGNED NOT NULL,
@@ -106,7 +106,7 @@ CREATE TABLE teacher_courses (
 -- ---------------------------------------------------------------------
 -- notes (uploaded PDFs: notes and suggestions)
 -- ---------------------------------------------------------------------
-CREATE TABLE notes (
+CREATE TABLE IF NOT EXISTS notes (
   id                INT UNSIGNED NOT NULL AUTO_INCREMENT,
   uploader_id       INT UNSIGNED NOT NULL,
   course_id         INT UNSIGNED NOT NULL,
@@ -142,7 +142,7 @@ CREATE TABLE notes (
 -- ---------------------------------------------------------------------
 -- reviews (teacher decisions, also the audit log)
 -- ---------------------------------------------------------------------
-CREATE TABLE reviews (
+CREATE TABLE IF NOT EXISTS reviews (
   id          INT UNSIGNED NOT NULL AUTO_INCREMENT,
   note_id     INT UNSIGNED NOT NULL,
   teacher_id  INT UNSIGNED NOT NULL,
@@ -163,7 +163,7 @@ CREATE TABLE reviews (
 -- ---------------------------------------------------------------------
 -- ratings (1 to 5 stars, one per user per note)
 -- ---------------------------------------------------------------------
-CREATE TABLE ratings (
+CREATE TABLE IF NOT EXISTS ratings (
   id          INT UNSIGNED NOT NULL AUTO_INCREMENT,
   note_id     INT UNSIGNED NOT NULL,
   user_id     INT UNSIGNED NOT NULL,
@@ -184,7 +184,7 @@ CREATE TABLE ratings (
 -- ---------------------------------------------------------------------
 -- follows (user follows user)
 -- ---------------------------------------------------------------------
-CREATE TABLE follows (
+CREATE TABLE IF NOT EXISTS follows (
   id            INT UNSIGNED NOT NULL AUTO_INCREMENT,
   follower_id   INT UNSIGNED NOT NULL,
   following_id  INT UNSIGNED NOT NULL,
@@ -203,7 +203,7 @@ CREATE TABLE follows (
 -- ---------------------------------------------------------------------
 -- notifications
 -- ---------------------------------------------------------------------
-CREATE TABLE notifications (
+CREATE TABLE IF NOT EXISTS notifications (
   id          INT UNSIGNED NOT NULL AUTO_INCREMENT,
   user_id     INT UNSIGNED NOT NULL,                 -- recipient
   type        ENUM('new_pending_note','note_approved','note_rejected',
@@ -224,7 +224,7 @@ CREATE TABLE notifications (
 -- ---------------------------------------------------------------------
 -- reports (flagged notes)
 -- ---------------------------------------------------------------------
-CREATE TABLE reports (
+CREATE TABLE IF NOT EXISTS reports (
   id           INT UNSIGNED NOT NULL AUTO_INCREMENT,
   note_id      INT UNSIGNED NOT NULL,
   reporter_id  INT UNSIGNED NOT NULL,

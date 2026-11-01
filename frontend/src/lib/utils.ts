@@ -15,3 +15,10 @@ export async function getCSRFToken(): Promise<string> {
     }
     return csrfResponse.data.csrfToken;
   }
+
+// Fetches the currently logged-in session user (/accounts/me/).
+// For fetching someone else's profile use /accounts/profile/<id>/.
+export async function getSessionUser() {
+  const response = await api.get("/accounts/me/");
+  return response;
+}

@@ -7,16 +7,17 @@ import { PdfCard } from "@/components/PdfCard";
 import { currentUserId, pdfs, userById } from "@/lib/mock-data";
 import { getCSRFToken } from "@/lib/utils";
 import api from "@/lib/api";
+import { setSessionUser } from "@/lib/auth";
 
 export const Route = createFileRoute("/feeds")({
   head: () => ({
     meta: [
-      { title: "Your feed — Margin" },
+      { title: "Your feed — Suggesion Hub" },
       {
         name: "description",
         content: "Approved notes and suggestions for your courses.",
       },
-      { property: "og:title", content: "Your feed — Margin" },
+      { property: "og:title", content: "Your feed — Suggesion Hub" },
       {
         property: "og:description",
         content: "Approved notes for your course and intake.",
@@ -136,6 +137,8 @@ function Feed() {
         },
       );
 
+      // Immediately notify SiteHeader that the user has logged out.
+      setSessionUser(null);
       setAuthStatus("unauthenticated");
 
       await nav({ to: "/login" });
@@ -180,7 +183,7 @@ function Feed() {
           </h1>
 
           <p className="text-sm text-muted-foreground">
-            You need to be logged in to access your Margin feed.
+            You need to be logged in to access your Suggesion Hub feed.
           </p>
 
           <Link

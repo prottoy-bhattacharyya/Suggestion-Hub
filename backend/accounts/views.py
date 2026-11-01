@@ -70,7 +70,7 @@ def me(request):
         return JsonResponse(
             {
                 "status": "success",
-                "logedIn": True,
+                "loggedIn": True,
                 "user": user
             },
             status=200,
@@ -78,7 +78,7 @@ def me(request):
     return JsonResponse(
         {
             "status": "failed",
-            "logedIn": False,
+            "loggedIn": False,
         }
     )
 
@@ -162,3 +162,72 @@ def login(request):
 def logout(request):
     request.session.flush()
     return JsonResponse({"status": "success", "message": "Logged out."})
+
+
+def profile(request, user_id):
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+
+    cursor.execute(
+        """
+        SELECT u.id, u.email, u.full_name, u.role, u.student_id,
+               u.department_id, u.intake, u.section, u.designation,
+               u.employee_id, d.name AS department_name
+        FROM users u
+        LEFT JOIN departments d ON d.id = u.department_id
+        WHERE u.id = %s
+        """,
+        (user_id,),
+    )
+    user = cursor.fetchone()
+
+    if not user:
+        cursor.close()
+        conn.close()
+        return JsonResponse({"error": "User not found."}, status=404)
+
+    cursor.execute(
+        "SELECT COUNT(*) AS total FROM follows WHERE following_id = %s",
+        (user_id,),
+    )
+    followers = cursor.fetchone()["total"]
+
+    cursor.execute(
+        "SELECT COUNT(*) AS total FROM follows WHERE follower_id = %s",
+        (user_id,),
+    )
+    following = cursor.fetchone()["total"]
+
+    courses = []
+    if user["role"] == "teacher":
+        cursor.execute(
+            """
+            SELECT c.code
+            FROM teacher_courses tc
+            JOIN courses c ON c.id = tc.course_id
+            WHERE tc.teacher_id = %s
+            ORDER BY c.code
+            """,
+            (user_id,),
+        )
+        courses = [row["code"] for row in cursor.fetchall()]
+
+    cursor.close()
+    conn.close()
+
+    # Hide other users' email; only the session owner sees their own.
+    session_user = request.session.get('user')
+    is_owner = bool(session_user) and session_user.get("id") == user_id
+    if not is_owner:
+        user.pop("email")
+
+    return JsonResponse(
+        {
+            "user": user,
+            "followers": followers,
+            "following": following,
+            "courses": courses,
+            "is_owner": is_owner,
+        },
+        status=200,
+    )

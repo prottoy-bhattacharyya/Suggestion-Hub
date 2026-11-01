@@ -26,8 +26,10 @@ def search_people(request):
                     u.role,
                     u.designation,
                     d.name,
-                    (SELECT COUNT(*) FROM follows f
-                     WHERE f.following_id = u.id) AS follower_count,
+                    (
+                        SELECT COUNT(*) FROM follows f
+                        WHERE f.following_id = u.id
+                    ) AS follower_count,
                     EXISTS(
                         SELECT 1 FROM follows f2
                         WHERE f2.follower_id = %s AND f2.following_id = u.id

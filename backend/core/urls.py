@@ -22,7 +22,7 @@ urlpatterns = [
     path("feeds/", include("feeds.urls")),
     path("accounts/", include("accounts.urls")),
     path("academics/", include("academics.urls")),
-    # path("notes/", include("notes.urls")),
+    path("notes/", include("notes.urls")),
     # path("review/", include("reviews.urls")),
     # path("social/", include("social.urls")),
     path("search/", include("search.urls")),

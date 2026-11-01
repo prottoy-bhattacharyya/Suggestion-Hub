@@ -16,10 +16,15 @@ def department_list(request):
     return JsonResponse(response_data)
 
 
-def course_list(request, department_id):
+def course_list(request):
+    department_id = request.GET.get('department_id', None)
+    
     conn = utils.get_db_connection()
     cursor = conn.cursor(dictionary=True)
-    cursor.execute("SELECT * FROM courses WHERE department_id = %s", (department_id,))
+    if department_id is not None:
+        cursor.execute("SELECT * FROM courses WHERE department_id = %s", (department_id,))
+    else:
+        cursor.execute("SELECT * FROM courses")
     courses = cursor.fetchall()
     response_data = {
         "courses": courses

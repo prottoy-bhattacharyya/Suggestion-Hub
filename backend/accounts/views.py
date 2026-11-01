@@ -1,7 +1,6 @@
 import json
 from django.shortcuts import render
 from django.http import JsonResponse
-from django.views.decorators.csrf import csrf_exempt
 from django.middleware.csrf import get_token
 from core.utils import get_db_connection
 

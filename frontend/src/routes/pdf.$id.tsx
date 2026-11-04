@@ -195,15 +195,6 @@ function PdfPage() {
             <ExternalLink size={16} />
             Open full screen
           </a>
-
-          <a
-            href={note.file_url}
-            download
-            className="btn-ghost inline-flex items-center gap-2"
-          >
-            <Download size={16} />
-            Download
-          </a>
         </div>
       </div>
 

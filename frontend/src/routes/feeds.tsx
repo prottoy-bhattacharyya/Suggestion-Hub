@@ -5,7 +5,7 @@ import axios from "axios";
 import { NoteCard, type Note } from "@/components/PdfCard";
 import api from "@/lib/api";
 import { getCSRFToken } from "@/lib/utils";
-import { setSessionUser } from "@/lib/auth";
+import { notifyAuthChange } from "@/lib/auth";
 
 export const Route = createFileRoute("/feeds")({
   head: () => ({
@@ -43,7 +43,6 @@ function Feed() {
 
   const [authStatus, setAuthStatus] = useState<AuthStatus>("checking");
   const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null);
-  const [logoutLoading, setLogoutLoading] = useState(false);
   const [error, setError] = useState("");
   const [notes, setNotes] = useState<Note[]>([]);
   const [notesLoading, setNotesLoading] = useState(false);
@@ -148,47 +147,6 @@ function Feed() {
       active = false;
     };
   }, [authStatus]);
-
-  // Logout the current Django session.
-  async function handleLogout() {
-    try {
-      setLogoutLoading(true);
-      setError("");
-
-      const csrfToken = await getCSRFToken();
-
-      await api.post(
-        "/accounts/logout/",
-        {},
-        {
-          headers: {
-            Accept: "application/json",
-            ...(csrfToken ? { "X-CSRFToken": csrfToken } : {}),
-          },
-        },
-      );
-
-      setSessionUser(null);
-      setCurrentUser(null);
-      setAuthStatus("unauthenticated");
-
-      window.dispatchEvent(new Event("auth-change"));
-
-      await nav({ to: "/login" });
-    } catch (err) {
-      console.error("Logout failed:", err);
-
-      setError(
-        axios.isAxiosError(err)
-          ? err.response?.data?.error ??
-              err.response?.data?.detail ??
-              "Logout failed. Please try again."
-          : "An unexpected error occurred while logging out.",
-      );
-    } finally {
-      setLogoutLoading(false);
-    }
-  }
 
   const filteredNotes = useMemo(() => {
     return notes.filter((note) => {
@@ -310,15 +268,6 @@ function Feed() {
               Notes and suggestions shared by your university community.
             </p>
           </div>
-
-          <button
-            type="button"
-            onClick={handleLogout}
-            disabled={logoutLoading}
-            className="btn-ghost"
-          >
-            {logoutLoading ? "Logging out..." : "Logout"}
-          </button>
         </div>
 
         {error && (

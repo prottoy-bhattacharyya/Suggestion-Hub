@@ -2,7 +2,7 @@ import { Link, useNavigate } from "@tanstack/react-router";
 import { CircleUserRound, LogOut } from "lucide-react";
 import { useEffect, useState } from "react";
 
-import { getSessionUser, type SessionUser } from "@/lib/auth";
+import { getSessionUser, notifyAuthChange, type SessionUser } from "@/lib/auth";
 import api from "@/lib/api";
 import { getCSRFToken } from "@/lib/utils";
 
@@ -65,7 +65,7 @@ export function SiteHeader() {
 
       setUser(null);
 
-      window.dispatchEvent(new Event("auth-change"));
+      notifyAuthChange();
 
       await navigate({ to: "/login" });
     } catch (error) {

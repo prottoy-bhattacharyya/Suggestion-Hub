@@ -4,12 +4,15 @@
   notFound,
   redirect,
 } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   FileText,
   Star,
   ExternalLink,
   LoaderCircle,
+  CheckCircle2,
+  Clock,
+  XCircle,
 } from "lucide-react";
 
 import api from "@/lib/api";
@@ -51,8 +54,10 @@ type Note = {
   rating_count: number;
   created_at: string;
   review_status: "pending" | "approved" | "rejected";
+  rejection_reason?: string | null;
+  review_reason?: string | null;
   uploader_name: string;
-  file_url: string;
+  file_url?: string | null;
 };
 
 type NotesResponse = {
@@ -119,7 +124,6 @@ function Profile() {
   const [followChecking, setFollowChecking] = useState(!isMe);
   const [followError, setFollowError] = useState("");
 
-  // Actual notes from Django.
   const [notes, setNotes] = useState<Note[]>([]);
   const [notesLoading, setNotesLoading] = useState(true);
   const [notesError, setNotesError] = useState("");
@@ -145,7 +149,7 @@ function Profile() {
         if (!cancelled) {
           if (data.status === "success") {
             // Owners can see all their uploads.
-            // Other visitors can only see approved uploads.
+            // Visitors can only see approved uploads.
             const visibleNotes = isMe
               ? data.notes
               : data.notes.filter(
@@ -176,6 +180,22 @@ function Profile() {
       cancelled = true;
     };
   }, [user.id, isMe]);
+
+  // Separate notes by review status.
+  const approvedNotes = useMemo(
+    () => notes.filter((note) => note.review_status === "approved"),
+    [notes],
+  );
+
+  const pendingNotes = useMemo(
+    () => notes.filter((note) => note.review_status === "pending"),
+    [notes],
+  );
+
+  const rejectedNotes = useMemo(
+    () => notes.filter((note) => note.review_status === "rejected"),
+    [notes],
+  );
 
   // Check whether the logged-in user already follows this profile.
   useEffect(() => {
@@ -259,9 +279,9 @@ function Profile() {
     }
   }
 
-  const approvedCount = notes.filter(
-    (note) => note.review_status === "approved",
-  ).length;
+  const totalUploads = isMe
+    ? notes.length
+    : approvedNotes.length;
 
   return (
     <div className="mx-auto max-w-4xl px-4 py-10">
@@ -344,23 +364,17 @@ function Profile() {
         {/* Profile statistics */}
         <div className="flex gap-6 text-center">
           <div>
-            <p className="font-display text-2xl">
-              {approvedCount}
-            </p>
+            <p className="font-display text-2xl">{totalUploads}</p>
             <p className="text-xs text-muted-foreground">Uploads</p>
           </div>
 
           <div>
-            <p className="font-display text-2xl">
-              {followersCount}
-            </p>
+            <p className="font-display text-2xl">{followersCount}</p>
             <p className="text-xs text-muted-foreground">Followers</p>
           </div>
 
           <div>
-            <p className="font-display text-2xl">
-              {profile.following}
-            </p>
+            <p className="font-display text-2xl">{profile.following}</p>
             <p className="text-xs text-muted-foreground">Following</p>
           </div>
         </div>
@@ -393,18 +407,12 @@ function Profile() {
         </p>
       )}
 
-      {/* Actual uploaded notes */}
-      <div className="mt-10 flex items-center justify-between">
+      {/* Notes sections */}
+      <div className="mt-10">
         <h2 className="text-xl">
           {isMe ? "My uploads" : "Uploads"}
         </h2>
 
-        <span className="text-sm text-muted-foreground">
-          {notes.length} {notes.length === 1 ? "upload" : "uploads"}
-        </span>
-      </div>
-
-      <div className="mt-4 space-y-3">
         {notesLoading && (
           <div className="flex items-center justify-center gap-2 py-10 text-muted-foreground">
             <LoaderCircle className="h-5 w-5 animate-spin" />
@@ -418,20 +426,45 @@ function Profile() {
           </p>
         )}
 
-        {!notesLoading &&
-          !notesError &&
-          notes.map((note) => (
-            <NoteCard
-              key={note.id}
-              note={note}
+        {!notesLoading && !notesError && (
+          <>
+            {/* Approved notes */}
+            <NotesSection
+              title="Approved Notes"
+              description="Notes that have been approved and are visible to everyone."
+              notes={approvedNotes}
+              icon={<CheckCircle2 className="h-5 w-5" />}
+              iconClass="text-success"
+              emptyMessage="No approved notes yet."
               showStatus={isMe}
             />
-          ))}
 
-        {!notesLoading && !notesError && notes.length === 0 && (
-          <p className="py-10 text-center text-muted-foreground">
-            No uploads yet.
-          </p>
+            {/* Pending notes — visible only to the owner */}
+            {isMe && (
+              <NotesSection
+                title="Pending Notes"
+                description="These notes are waiting for administrator review."
+                notes={pendingNotes}
+                icon={<Clock className="h-5 w-5" />}
+                iconClass="text-highlight"
+                emptyMessage="No pending notes."
+                showStatus
+              />
+            )}
+
+            {/* Rejected notes — visible only to the owner */}
+            {isMe && (
+              <NotesSection
+                title="Rejected Notes"
+                description="These notes were not approved. Check the reason below."
+                notes={rejectedNotes}
+                icon={<XCircle className="h-5 w-5" />}
+                iconClass="text-destructive"
+                emptyMessage="No rejected notes."
+                showStatus
+              />
+            )}
+          </>
         )}
       </div>
 
@@ -442,7 +475,60 @@ function Profile() {
   );
 }
 
-// Real note card — no mock data.
+function NotesSection({
+  title,
+  description,
+  notes,
+  icon,
+  iconClass,
+  emptyMessage,
+  showStatus,
+}: {
+  title: string;
+  description: string;
+  notes: Note[];
+  icon: React.ReactNode;
+  iconClass: string;
+  emptyMessage: string;
+  showStatus: boolean;
+}) {
+  return (
+    <section className="mt-6">
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <div className="flex items-center gap-2">
+            <span className={iconClass}>{icon}</span>
+            <h3 className="text-lg font-semibold">{title}</h3>
+            <span className="chip bg-secondary text-secondary-foreground">
+              {notes.length}
+            </span>
+          </div>
+
+          <p className="mt-1 text-sm text-muted-foreground">
+            {description}
+          </p>
+        </div>
+      </div>
+
+      {notes.length === 0 ? (
+        <p className="paper-card py-6 text-center text-sm text-muted-foreground">
+          {emptyMessage}
+        </p>
+      ) : (
+        <div className="space-y-3">
+          {notes.map((note) => (
+            <NoteCard
+              key={note.id}
+              note={note}
+              showStatus={showStatus}
+            />
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
+
 function NoteCard({
   note,
   showStatus,
@@ -466,6 +552,9 @@ function NoteCard({
     approved: "bg-success/15 text-success",
     rejected: "bg-destructive/15 text-destructive",
   }[note.review_status];
+
+  const rejectionReason =
+    note.rejection_reason || note.review_reason;
 
   return (
     <article className="paper-card p-5">
@@ -493,14 +582,29 @@ function NoteCard({
             )}
           </div>
 
-          <h3 className="font-display text-lg leading-snug">
+          <h4 className="font-display text-lg leading-snug">
             {note.title}
-          </h3>
+          </h4>
 
           {note.description && (
             <p className="mt-1 text-sm text-muted-foreground">
               {note.description}
             </p>
+          )}
+
+          {/* Rejection reason */}
+          {showStatus && note.review_status === "rejected" && (
+            <div className="mt-3 rounded-lg border border-destructive/30 bg-destructive/5 p-3">
+              <div className="flex items-center gap-2 text-sm font-semibold text-destructive">
+                <XCircle className="h-4 w-4" />
+                Rejection reason
+              </div>
+
+              <p className="mt-1 text-sm text-foreground">
+                {rejectionReason ||
+                  "No rejection reason was provided by the administrator."}
+              </p>
+            </div>
           )}
 
           <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-muted-foreground">
@@ -515,23 +619,24 @@ function NoteCard({
 
             <span className="inline-flex items-center gap-1">
               <Star className="h-3.5 w-3.5 fill-highlight text-highlight" />
-              {rating.toFixed(1)}
+              {Number.isFinite(rating) ? rating.toFixed(1) : "0.0"}
             </span>
 
             <span>({note.rating_count} ratings)</span>
           </div>
 
-          <Link
-            to="/pdf/$id"
-            params={{ id: String(note.id) }}
-            className="btn-ghost mt-4 inline-flex items-center gap-2"
-          >
-            <FileText className="h-4 w-4" />
-            View PDF
-            <ExternalLink className="h-3.5 w-3.5" />
-          </Link>
-
-          {!note.file_url && (
+          {note.file_url ? (
+            <Link
+              to="/pdf/$id"
+              params={{ id: String(note.id) }}
+              className="btn-primary mt-4 inline-flex items-center gap-2"
+              
+            >
+              <FileText className="h-4 w-4" />
+              View PDF
+              <ExternalLink className="h-3.5 w-3.5" />
+            </Link>
+          ) : (
             <p className="mt-3 text-xs text-destructive">
               PDF link is missing from the server response.
             </p>

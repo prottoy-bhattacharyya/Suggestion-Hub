@@ -1,44 +1,54 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
-import { LogOut } from "lucide-react";
 import axios from "axios";
 
-import { PdfCard } from "@/components/PdfCard";
-import { currentUserId, pdfs, userById } from "@/lib/mock-data";
-import { getCSRFToken } from "@/lib/utils";
+import { NoteCard, type Note } from "@/components/PdfCard";
 import api from "@/lib/api";
+import { getCSRFToken } from "@/lib/utils";
 import { setSessionUser } from "@/lib/auth";
 
 export const Route = createFileRoute("/feeds")({
   head: () => ({
     meta: [
-      { title: "Your feed — Suggesion Hub" },
+      { title: "Your feed — Suggestion Hub" },
       {
         name: "description",
         content: "Approved notes and suggestions for your courses.",
-      },
-      { property: "og:title", content: "Your feed — Suggesion Hub" },
-      {
-        property: "og:description",
-        content: "Approved notes for your course and intake.",
       },
     ],
   }),
   component: Feed,
 });
 
-const following = ["u2"];
-
 type AuthStatus = "checking" | "authenticated" | "unauthenticated";
+
+type CurrentUser = {
+  id: number;
+  full_name: string;
+  email: string;
+  role: string;
+  department_id?: number;
+  student_id?: string;
+  intake?: string;
+  section?: string;
+};
+
+type NotesResponse = {
+  status: string;
+  notes: Note[];
+};
 
 function Feed() {
   const nav = useNavigate();
 
   const [authStatus, setAuthStatus] = useState<AuthStatus>("checking");
+  const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null);
   const [logoutLoading, setLogoutLoading] = useState(false);
   const [error, setError] = useState("");
+  const [notes, setNotes] = useState<Note[]>([]);
+  const [notesLoading, setNotesLoading] = useState(false);
 
-  const [f, setF] = useState({
+  const [filters, setFilters] = useState({
     course: "",
     intake: "",
     section: "",
@@ -48,18 +58,15 @@ function Feed() {
 
   const [shown, setShown] = useState(4);
 
-  // Check whether the user has an active Django session.
+  // Check the Django session.
   useEffect(() => {
     let active = true;
 
     async function checkLogin() {
       try {
-        const csrfToken = await getCSRFToken();
-
         const response = await api.get("/accounts/me/", {
           headers: {
             Accept: "application/json",
-            ...(csrfToken ? { "X-CSRFToken": csrfToken } : {}),
           },
         });
 
@@ -69,14 +76,20 @@ function Feed() {
           response.data.loggedIn ?? response.data.logedIn,
         );
 
-        setAuthStatus(
-          loggedIn ? "authenticated" : "unauthenticated",
-        );
-      } catch (err: unknown) {
-        if (!active) return;
-
+        if (loggedIn && response.data.user) {
+          setCurrentUser(response.data.user);
+          setAuthStatus("authenticated");
+        } else {
+          setCurrentUser(null);
+          setAuthStatus("unauthenticated");
+        }
+      } catch (err) {
         console.error("Login check failed:", err);
-        setAuthStatus("unauthenticated");
+
+        if (active) {
+          setCurrentUser(null);
+          setAuthStatus("unauthenticated");
+        }
       }
     }
 
@@ -87,41 +100,60 @@ function Feed() {
     };
   }, []);
 
-    // This section is only reached after authentication succeeds.
-  const me = userById(currentUserId);
+  // Fetch actual feed notes after authentication.
+  useEffect(() => {
+    if (authStatus !== "authenticated") return;
 
-  const list = useMemo(() => {
-    const group = (p: (typeof pdfs)[0]) => {
-      if (following.includes(p.uploaderId)) return 0;
-      if (me.courses.includes(p.course)) return 1;
-      if (userById(p.uploaderId).department === me.department) return 2;
-      return 3;
+    let active = true;
+
+    async function fetchFeed() {
+      try {
+        setNotesLoading(true);
+        setError("");
+
+        // Replace this with your actual Django feed endpoint.
+        const response = await api.get<NotesResponse>("/notes/get_feed/", {
+          headers: {
+            Accept: "application/json",
+          },
+        });
+
+        if (!active) return;
+
+        if (response.data.status === "success") {
+          setNotes(response.data.notes ?? []);
+        } else {
+          setError("Could not load the feed.");
+        }
+      } catch (err) {
+        console.error("Feed loading failed:", err);
+
+        if (active) {
+          setError(
+            axios.isAxiosError(err)
+              ? err.response?.data?.error ??
+                  err.response?.data?.detail ??
+                  "Could not load notes. Please check the feed API endpoint."
+              : "An unexpected error occurred while loading notes.",
+          );
+        }
+      } finally {
+        if (active) setNotesLoading(false);
+      }
+    }
+
+    void fetchFeed();
+
+    return () => {
+      active = false;
     };
-
-    return pdfs
-      .filter(
-        (p) => p.status === "approved" && p.uploaderId !== me.id,
-      )
-      .filter(
-        (p) =>
-          (!f.course || p.course === f.course) &&
-          (!f.intake || p.intake === f.intake) &&
-          (!f.section || p.section === f.section) &&
-          (!f.type || p.type === f.type) &&
-          p.rating >= Number(f.rating),
-      )
-      .sort(
-        (a, b) =>
-          group(a) - group(b) || b.date.localeCompare(a.date),
-      );
-  }, [f, me]);
+  }, [authStatus]);
 
   // Logout the current Django session.
   async function handleLogout() {
-    setError("");
-
     try {
       setLogoutLoading(true);
+      setError("");
 
       const csrfToken = await getCSRFToken();
 
@@ -130,39 +162,47 @@ function Feed() {
         {},
         {
           headers: {
-            "Content-Type": "application/json",
             Accept: "application/json",
             ...(csrfToken ? { "X-CSRFToken": csrfToken } : {}),
           },
         },
       );
 
-      // Immediately notify SiteHeader that the user has logged out.
       setSessionUser(null);
+      setCurrentUser(null);
       setAuthStatus("unauthenticated");
 
+      window.dispatchEvent(new Event("auth-change"));
+
       await nav({ to: "/login" });
-    } catch (err: unknown) {
+    } catch (err) {
       console.error("Logout failed:", err);
 
-      if (axios.isAxiosError(err)) {
-        const data = err.response?.data;
-
-        setError(
-          data?.error ??
-            data?.detail ??
-            data?.message ??
-            "Logout failed. Please try again.",
-        );
-      } else {
-        setError("An unexpected error occurred while logging out.");
-      }
+      setError(
+        axios.isAxiosError(err)
+          ? err.response?.data?.error ??
+              err.response?.data?.detail ??
+              "Logout failed. Please try again."
+          : "An unexpected error occurred while logging out.",
+      );
     } finally {
       setLogoutLoading(false);
     }
   }
 
-  // Do not show feed content until authentication is confirmed.
+  const filteredNotes = useMemo(() => {
+    return notes.filter((note) => {
+      const rating = Number(note.rating_avg ?? 0);
+
+      return (
+        (!filters.intake || note.intake === filters.intake) &&
+        (!filters.section || note.section === filters.section) &&
+        (!filters.type || note.type === filters.type) &&
+        rating >= Number(filters.rating)
+      );
+    });
+  }, [notes, filters]);
+
   if (authStatus === "checking") {
     return (
       <div className="flex min-h-[60vh] items-center justify-center px-4">
@@ -173,7 +213,6 @@ function Feed() {
     );
   }
 
-  // Logged-out users see only the login message.
   if (authStatus === "unauthenticated") {
     return (
       <div className="flex min-h-[70vh] items-center justify-center px-4">
@@ -183,7 +222,7 @@ function Feed() {
           </h1>
 
           <p className="text-sm text-muted-foreground">
-            You need to be logged in to access your Suggesion Hub feed.
+            You need to be logged in to access your Suggestion Hub feed.
           </p>
 
           <Link
@@ -197,23 +236,24 @@ function Feed() {
     );
   }
 
-
+  if (!currentUser) return null;
 
   const sel = (
-    k: keyof typeof f,
-    opts: [string, string][],
+    key: keyof typeof filters,
+    options: [string, string][],
   ) => (
     <select
       className="field w-full"
-      value={f[k]}
-      onChange={(e) =>
-        setF((previous) => ({
+      value={filters[key]}
+      onChange={(event) => {
+        setFilters((previous) => ({
           ...previous,
-          [k]: e.target.value,
-        }))
-      }
+          [key]: event.target.value,
+        }));
+        setShown(4);
+      }}
     >
-      {opts.map(([value, label]) => (
+      {options.map(([value, label]) => (
         <option key={value} value={value}>
           {label}
         </option>
@@ -223,21 +263,18 @@ function Feed() {
 
   return (
     <div className="mx-auto grid max-w-6xl gap-8 px-4 py-10 lg:grid-cols-[240px_1fr]">
-      {/* Filters */}
       <aside className="space-y-3 lg:sticky lg:top-24 lg:self-start">
         <h2 className="text-lg font-semibold">Filters</h2>
 
         {sel("course", [
           ["", "All courses"],
-          ["CSE220", "CSE220"],
-          ["CSE221", "CSE221"],
-          ["EEE201", "EEE201"],
         ])}
 
         {sel("intake", [
           ["", "All intakes"],
           ["48", "Intake 48"],
           ["49", "Intake 49"],
+          ["52", "Intake 52"],
         ])}
 
         {sel("section", [
@@ -246,6 +283,7 @@ function Feed() {
           ["2", "Section 2"],
           ["3", "Section 3"],
           ["4", "Section 4"],
+          ["5", "Section 5"],
         ])}
 
         {sel("type", [
@@ -261,29 +299,24 @@ function Feed() {
         ])}
       </aside>
 
-      {/* Main feed */}
       <main>
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div>
             <h1 className="text-3xl">
-              Good evening, {me.name.split(" ")[0]}
+              Good day, {currentUser.full_name.split(" ")[0]}
             </h1>
 
             <p className="mt-1 text-sm text-muted-foreground">
-              People you follow first, then your courses, then your
-              department.
+              Notes and suggestions shared by your university community.
             </p>
           </div>
 
-          {/* Logout button */}
           <button
             type="button"
             onClick={handleLogout}
             disabled={logoutLoading}
-            className="btn-ghost inline-flex items-center gap-2 disabled:cursor-not-allowed disabled:opacity-50"
+            className="btn-ghost"
           >
-            <LogOut size={18} />
-
             {logoutLoading ? "Logging out..." : "Logout"}
           </button>
         </div>
@@ -298,18 +331,26 @@ function Feed() {
         )}
 
         <div className="mt-6 space-y-3">
-          {list.slice(0, shown).map((p) => (
-            <PdfCard key={p.id} pdf={p} />
-          ))}
-
-          {!list.length && (
+          {notesLoading ? (
             <p className="py-10 text-center text-muted-foreground">
-              No PDFs match these filters.
+              Loading notes...
             </p>
+          ) : (
+            <>
+              {filteredNotes.slice(0, shown).map((note) => (
+                <NoteCard key={note.id} note={note} />
+              ))}
+
+              {!filteredNotes.length && (
+                <p className="py-10 text-center text-muted-foreground">
+                  No notes match these filters.
+                </p>
+              )}
+            </>
           )}
         </div>
 
-        {shown < list.length && (
+        {shown < filteredNotes.length && (
           <button
             type="button"
             onClick={() => setShown((previous) => previous + 4)}

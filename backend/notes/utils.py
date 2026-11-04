@@ -12,25 +12,22 @@ def save_file(file, destination_path):
 
     if not file:
         raise ValueError("No file provided for saving.")
-    os.makedirs("uploaded_notes", exist_ok=True)
+    directory = os.path.dirname(destination_path) or "uploaded_notes"
+    os.makedirs(directory, exist_ok=True)
     with open(destination_path, 'wb+') as destination:
         for chunk in file.chunks():
             destination.write(chunk)
 
 def getFileHash(file):
     """
-    Calculate the SHA-256 hash of a file.
+    Calculate the SHA-256 hash of an uploaded file (streamed from memory).
 
     Args:
-        file (File): The file to hash.
+        file (File): The uploaded file (Django UploadedFile).
     """
-   
 
-    # Open the file in binary read mode ('rb')
-    with open(file, "rb") as f:
-        # Supported algorithms include "sha256", "md5", "sha1", etc.
-        digest = hashlib.file_digest(f, "sha256")
+    digest = hashlib.sha256()
+    for chunk in file.chunks():
+        digest.update(chunk)
 
-    # Get the final hexadecimal hash string
-    file_hash = digest.hexdigest()
-    return file_hash
+    return digest.hexdigest()

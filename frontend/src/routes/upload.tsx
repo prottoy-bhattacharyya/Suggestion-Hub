@@ -299,7 +299,8 @@ function Upload() {
 
         <div className="mt-6 flex flex-col gap-3">
           <Link
-            to="/profile/me/"
+            to="/profile/$id"
+            params={{ id: "me" }}
             className="btn-primary text-center"
           >
             View my uploads

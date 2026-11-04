@@ -24,7 +24,7 @@ urlpatterns = [
     path("academics/", include("academics.urls")),
     path("notes/", include("notes.urls")),
     # path("review/", include("reviews.urls")),
-    # path("social/", include("social.urls")),
+    path("social/", include("social.urls")),
     path("search/", include("search.urls")),
     # path("ask/", include("ai.urls")),
     # path("notifications/", include("notifications.urls")),

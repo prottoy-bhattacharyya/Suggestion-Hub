@@ -182,7 +182,7 @@ function SearchPage() {
       const csrfToken = await getCSRFToken();
 
       const response = await api.post(
-        `/accounts/follow/${person.id}/`,
+        `/social/follow/${person.id}/`,
         { action },
         {
           headers: {

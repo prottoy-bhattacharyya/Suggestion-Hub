@@ -111,7 +111,7 @@ function Feed() {
         setError("");
 
         // Replace this with your actual Django feed endpoint.
-        const response = await api.get<NotesResponse>("/notes/get_feed/", {
+        const response = await api.get<NotesResponse>("/feeds/get_feeds/", {
           headers: {
             Accept: "application/json",
           },

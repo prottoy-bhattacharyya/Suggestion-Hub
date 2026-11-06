@@ -82,7 +82,6 @@ def me(request):
         }
     )
 
-
 def login(request):
     
     data = json.loads(request.body)

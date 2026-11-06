@@ -17,6 +17,7 @@ import {
 
 import api from "@/lib/api";
 import { getSessionUser } from "@/lib/auth";
+import { getCSRFToken } from "@/lib/utils";
 
 type ProfileData = {
   user: {
@@ -252,6 +253,8 @@ function Profile() {
     const previousFollow = follow;
 
     try {
+      const csrfToken = await getCSRFToken();
+      api.defaults.headers.post["X-CSRFToken"] = csrfToken;
       const { data } = await api.post<FollowStatusResponse>(
         `/social/follow/${user.id}/`,
         {},

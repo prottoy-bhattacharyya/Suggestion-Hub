@@ -262,42 +262,44 @@ function PdfPage() {
         {/* Rate this PDF */}
         {note.review_status === "approved" && (
           <div className="paper-card p-4">
-            <p className="label-sm">
+            <p className="text-sm font-medium">
               {note.is_owner
                 ? "You can't rate your own upload"
                 : myRating
                   ? "Your rating"
                   : "Rate this PDF"}
             </p>
-
-            <div
+            {!note.is_owner && (
+              <div
               className="mt-2 flex gap-1"
               onMouseLeave={() => setHoverRating(0)}
-            >
-              {[1, 2, 3, 4, 5].map((star) => (
-                <button
-                  key={star}
-                  type="button"
-                  disabled={!canRate || ratingLoading}
-                  onMouseEnter={() => canRate && setHoverRating(star)}
-                  onClick={() => handleRate(star)}
-                  aria-label={`Rate ${star} star${star === 1 ? "" : "s"}`}
-                  className="disabled:cursor-default"
-                >
-                  <Star
-                    className={`h-6 w-6 ${
-                      (hoverRating || myRating) >= star
-                        ? "fill-highlight text-highlight"
-                        : "text-border"
-                    }`}
-                  />
-                </button>
-              ))}
+              >
+                {[1, 2, 3, 4, 5].map((star) => (
+                  <button
+                    key={star}
+                    type="button"
+                    disabled={!canRate || ratingLoading}
+                    onMouseEnter={() => canRate && setHoverRating(star)}
+                    onClick={() => handleRate(star)}
+                    aria-label={`Rate ${star} star${star === 1 ? "" : "s"}`}
+                    className="disabled:cursor-default"
+                  >
+                    <Star
+                      className={`h-6 w-6 ${
+                        (hoverRating || myRating) >= star
+                          ? "fill-highlight text-highlight"
+                          : "text-border"
+                      }`}
+                    />
+                  </button>
+                ))}
 
-              {ratingLoading && (
-                <LoaderCircle size={22} className="self-center animate-spin" />
-              )}
-            </div>
+                {ratingLoading && (
+                  <LoaderCircle size={22} className="self-center animate-spin" />
+                )}
+              </div>
+            )}
+            
 
             {myRating > 0 && !note.is_owner && (
               <p className="mt-2 text-xs text-muted-foreground">

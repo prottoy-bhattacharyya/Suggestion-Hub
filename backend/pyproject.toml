@@ -11,6 +11,7 @@ dependencies = [
     "django>=6.1.2",
     "django-cors-headers>=4.9.0",
     "mysql-connector-python>=26.10.0",
+    "mysqlclient>=2.3.0",
 ]
 
 [project.scripts]

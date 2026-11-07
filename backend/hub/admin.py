@@ -21,7 +21,7 @@ class HubUserAdmin(admin.ModelAdmin):
     def get_list_display(self, request):
         return [field.name for field in self.model._meta.fields]
     search_fields = ("full_name", "email", "student_id", "employee_id")
-    list_filter = ("role", "is_active")
+    list_filter = ("role", "is_active", "is_verified", "department")
 
 @admin.register(TeacherCourse)
 class TeacherCourseAdmin(admin.ModelAdmin):
@@ -36,7 +36,7 @@ class NoteAdmin(admin.ModelAdmin):
     search_fields = ("title", "description")
     list_filter = ("review_status", "type", "course")
     # decision (b): only review_status + approved_at editable — approve from the admin!
-    fields = ("review_status", "approved_at")
+    # fields = ("review_status", "approved_at")
 
 @admin.register(Review)
 class ReviewAdmin(admin.ModelAdmin):

@@ -38,6 +38,7 @@ uv sync
 #      SOURCE schema.sql;
 
 # 3. Create Django's built-in tables (sessions, admin, auth) — run once
+uv run python manage.py makemigrations
 uv run python manage.py migrate
 
 # 4. Start the dev server on http://localhost:8000

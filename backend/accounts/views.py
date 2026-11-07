@@ -137,7 +137,7 @@ def login(request):
                 "section": user['section'],
             }
         }
-    if user["role"] == "teacher":
+    if user["role"] == "teacher" and user["is_verified"]:
         response_data = {
             "status": "success",
             "message": "Login successful.",
@@ -151,6 +151,13 @@ def login(request):
                 "employee_id": user["employee_id"],
             }
         }
+    
+    if user["role"] == "teacher" and not user["is_verified"]:
+        response_data = {
+            "status": "error",
+            "message": "Account is not verified. You can login after admin verification.",
+        }
+        return JsonResponse(response_data, status=403)
 
     
     request.session['user'] = response_data["user"]

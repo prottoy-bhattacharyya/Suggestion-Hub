@@ -7,6 +7,9 @@ class Department(models.Model):
         managed = False
         db_table = "departments"
 
+    def __str__(self):
+        return f"{self.code}"
+
 class Course(models.Model):
     code = models.CharField(max_length=20)
     title = models.CharField(max_length=200)
@@ -23,15 +26,15 @@ class HubUser(models.Model):
     password = models.CharField(max_length=255)   # REMINDER: currently plaintext (see caveats)
     full_name = models.CharField(max_length=150)
     role = models.CharField(max_length=10, choices=[("student","student"),("teacher","teacher"),("admin","admin")])
-    student_id = models.CharField(max_length=30, null=True)
+    student_id = models.CharField(max_length=30, null=True, blank=True)
     department = models.ForeignKey(Department, models.DO_NOTHING, null=True, db_column="department_id")
-    intake = models.CharField(max_length=10, null=True)
-    section = models.CharField(max_length=10, null=True)
+    intake = models.CharField(max_length=10, null=True, blank=True)
+    section = models.CharField(max_length=10, null=True, blank=True)
     designation = models.CharField(max_length=100, null=True, blank=True)
     employee_id = models.CharField(max_length=30, null=True, blank=True)
     is_verified = models.BooleanField(default=False)
     is_active = models.BooleanField(default=True)
-    created_at = models.DateTimeField()
+    created_at = models.DateTimeField(default=models.functions.Now())
     class Meta:
         managed = False
         db_table = "users"
@@ -43,7 +46,11 @@ class HubUser(models.Model):
 
 
 class TeacherCourse(models.Model):
-    teacher = models.ForeignKey(HubUser, models.DO_NOTHING, db_column="teacher_id", related_name="+")
+    teacher = models.ForeignKey(
+        HubUser, models.DO_NOTHING, 
+        db_column="teacher_id", related_name="+",
+        limit_choices_to={"role": "teacher"}
+    )
     course = models.ForeignKey(Course, models.DO_NOTHING, db_column="course_id", related_name="+")
     class Meta:
         managed = False

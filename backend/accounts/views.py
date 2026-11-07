@@ -65,6 +65,41 @@ def signup(request):
 
 def me(request):
     user = request.session.get('user')
+    with get_db_connection() as conn:
+        cursor = conn.cursor(dictionary=True)
+        if user:
+            cursor.execute("SELECT role, is_active, is_verified FROM users WHERE id = %s", (user['id'],))
+            user_verification = cursor.fetchone()
+        else:
+            user = None
+
+    if not user_verification:
+        return JsonResponse(
+            {
+                "status": "failed",
+                "loggedIn": False,
+            }
+        )
+    
+    if not user_verification['is_active']:
+        return JsonResponse(
+            {
+                "status": "error",
+                "loggedIn": False,
+                "message": "Account is inactive. Please contact support.",
+            },
+            status=403,
+        )
+
+    if user_verification["role"] == "teacher" and not user_verification["is_verified"]:
+        response_data = {
+            "status": "error",
+            "loggedIn": False,
+            "message": "Account is not verified. You can login after admin verification.",
+        }
+        return JsonResponse(response_data, status=403)
+
+    
     if user:
         return JsonResponse(
             {

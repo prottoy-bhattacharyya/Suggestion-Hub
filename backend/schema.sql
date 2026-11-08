@@ -270,6 +270,48 @@ BEGIN
   END IF;
 END$$
 
+-- 1. A teacher submits a decision
+CREATE TRIGGER trg_reviews_after_insert
+AFTER INSERT ON reviews
+FOR EACH ROW
+BEGIN
+  UPDATE notes
+  SET review_status = NEW.decision,
+      approved_at   = CASE WHEN NEW.decision = 'approved' THEN NOW() ELSE NULL END
+  WHERE id = NEW.note_id;
+END$$
+
+-- 2. A decision is changed (for example rejected -> approved)
+CREATE TRIGGER trg_reviews_after_update
+AFTER UPDATE ON reviews
+FOR EACH ROW
+BEGIN
+  -- only react to a real change, and only if this is the note's latest review
+  IF NEW.decision <> OLD.decision
+     AND NEW.id = (SELECT MAX(r.id) FROM reviews r WHERE r.note_id = NEW.note_id) THEN
+    UPDATE notes
+    SET review_status = NEW.decision,
+        approved_at   = CASE WHEN NEW.decision = 'approved' THEN NOW() ELSE NULL END
+    WHERE id = NEW.note_id;
+  END IF;
+END$$
+
+-- 3. A review is deleted: fall back to the previous review, or to 'pending'
+CREATE TRIGGER trg_reviews_after_delete
+AFTER DELETE ON reviews
+FOR EACH ROW
+BEGIN
+  UPDATE notes
+  SET review_status = COALESCE(
+        (SELECT r.decision FROM reviews r
+         WHERE r.note_id = OLD.note_id ORDER BY r.id DESC LIMIT 1),
+        'pending'),
+      approved_at = CASE
+        WHEN review_status = 'approved' THEN COALESCE(approved_at, NOW())
+        ELSE NULL END
+  WHERE id = OLD.note_id;
+END$$
+
 DELIMITER ;
 
 -- ---------------------------------------------------------------------

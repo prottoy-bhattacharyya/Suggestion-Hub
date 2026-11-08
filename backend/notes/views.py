@@ -111,6 +111,7 @@ def note_file(request, note_id):
 
 def get_notes(request):
     user_id = request.GET.get('user_id')
+    
 
     conn = get_db_connection()
     cursor = conn.cursor()

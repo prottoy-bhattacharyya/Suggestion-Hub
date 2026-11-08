@@ -66,7 +66,7 @@ class Note(models.Model):
     section = models.CharField(max_length=10, null=True)
     file = models.CharField(max_length=255)
     file_hash = models.CharField(max_length=64)
-    page_count = models.PositiveIntegerField(null=True)
+    page_count = models.PositiveIntegerField(null=True, blank=True)
     ocr_used = models.BooleanField(default=False)
     review_status = models.CharField(max_length=10, choices=[("pending","pending"),("approved","approved"),("rejected","rejected")], default="pending")
     processing_status = models.CharField(max_length=10, choices=[("processing","processing"),("ready","ready"),("failed","failed")], default="processing")
@@ -85,7 +85,11 @@ class Note(models.Model):
 
 class Review(models.Model):
     note = models.ForeignKey(Note, models.DO_NOTHING, db_column="note_id", related_name="+")
-    teacher = models.ForeignKey(HubUser, models.DO_NOTHING, db_column="teacher_id", related_name="+")
+    teacher = models.ForeignKey(
+        HubUser, models.DO_NOTHING, 
+        db_column="teacher_id", related_name="+",
+        limit_choices_to={"role": "teacher"}
+    )
     decision = models.CharField(max_length=10, choices=[("approved","approved"),("rejected","rejected")])
     comment = models.TextField(null=True)
     created_at = models.DateTimeField()

@@ -83,7 +83,7 @@ def search_keywords(request):
                 FROM notes n
                 JOIN courses c ON c.id = n.course_id
                 JOIN users u ON u.id = n.uploader_id
-                WHERE (n.title LIKE %s OR n.description LIKE %s)
+                WHERE (n.title LIKE %s OR n.description LIKE %s) AND n.review_status = 'approved'
                 ORDER BY
                 CASE
                     WHEN n.title LIKE %s THEN 3          -- title starts with the text

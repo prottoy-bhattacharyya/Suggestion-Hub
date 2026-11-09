@@ -1,6 +1,18 @@
 import { createFileRoute, Link, notFound } from "@tanstack/react-router";
 import { useState } from "react";
-import { Download, ExternalLink, Flag, Star, LoaderCircle } from "lucide-react";
+import {
+  ArrowLeft,
+  BookOpen,
+  CalendarDays,
+  CheckCircle2,
+  Download,
+  ExternalLink,
+  Flag,
+  GraduationCap,
+  LoaderCircle,
+  Star,
+  Users,
+} from "lucide-react";
 import { StatusPill, Stars } from "@/components/PdfCard";
 import { getCSRFToken } from "@/lib/utils";
 import api from "@/lib/api";
@@ -166,249 +178,337 @@ function PdfPage() {
     }
   }
 
+  const avg = Number(ratingAvg);
+  const activeStars = hoverRating || myRating;
+  const starLabels = ["", "Poor", "Fair", "Good", "Great", "Excellent"];
+  const uploaderInitials = note.uploader_name
+    .split(" ")
+    .map((w: string) => w[0])
+    .join("")
+    .slice(0, 2)
+    .toUpperCase();
+  const formattedDate = note.created_at
+    ? new Date(note.created_at).toLocaleDateString(undefined, {
+        year: "numeric",
+        month: "short",
+        day: "numeric",
+      })
+    : null;
+
+  const meta = [
+    { icon: GraduationCap, label: "Intake", value: note.intake },
+    { icon: Users, label: "Section", value: note.section },
+    { icon: CalendarDays, label: "Uploaded", value: formattedDate },
+  ].filter((m) => m.value);
+
   return (
-    <div className="mx-auto grid max-w-6xl gap-8 px-4 py-10 lg:grid-cols-[1fr_320px]">
-      {/* PDF preview */}
-      <div>
-        <div className="paper-card overflow-hidden">
-          <iframe
-            src={note.file_url}
-            title={note.title}
-            className="aspect-[3/4] max-h-[80vh] min-h-[500px] w-full bg-muted"
-          >
-            <p>
-              Your browser cannot display PDFs.{" "}
-              <a href={note.file_url} target="_blank" rel="noopener noreferrer">
-                Open it here instead.
-              </a>
-            </p>
-          </iframe>
-        </div>
+    <div className="mx-auto max-w-7xl px-4 py-10 sm:px-6 lg:py-14">
+      <Link
+        to="/feeds"
+        className="mb-6 inline-flex items-center gap-1.5 text-sm text-muted-foreground transition-colors hover:text-foreground"
+      >
+        <ArrowLeft className="h-4 w-4" /> Back to feed
+      </Link>
 
-        <div className="mt-3 flex flex-wrap gap-2">
-          <a
-            href={note.file_url}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="btn-primary inline-flex items-center gap-2"
-          >
-            <ExternalLink size={16} />
-            Open full screen
-          </a>
-        </div>
-      </div>
-
-      {/* Info, rating and report */}
-      <aside className="space-y-5">
-        <div className="flex flex-wrap gap-2">
-          {note.course_code && (
-            <span className="chip bg-accent">{note.course_code}</span>
-          )}
-
-          <span
-            className={`chip ${
-              note.type === "note"
-                ? "bg-secondary text-secondary-foreground"
-                : "bg-highlight/25 text-foreground"
-            }`}
-          >
-            {note.type}
-          </span>
-
-          {note.review_status !== "approved" && (
-            <StatusPill status={note.review_status} />
-          )}
-        </div>
-
-        <div>
-          <h1 className="text-2xl leading-tight">{note.title}</h1>
-
-          {note.description && (
-            <p className="mt-2 text-sm text-muted-foreground">
-              {note.description}
-            </p>
-          )}
-
-          <p className="mt-3 text-sm">
-            Intake {note.intake}
-            {note.section ? ` · Section ${note.section}` : ""}
-            {note.created_at
-              ? ` · ${new Date(note.created_at).toLocaleDateString(undefined, {
-                  year: "numeric",
-                  month: "short",
-                  day: "numeric",
-                })}`
-              : ""}
-          </p>
-
-          <Link
-            to="/profile/$id"
-            params={{ id: String(note.uploader_id) }}
-            className="mt-2 block text-sm"
-          >
-            by <b className="text-primary">{note.uploader_name}</b>
-          </Link>
-        </div>
-
-        <div className="flex items-center gap-2">
-          <Stars value={Number(note.rating_avg)} />
-          <span className="text-sm text-muted-foreground">
-            {Number(ratingAvg) > 0
-              ? `${Number(ratingAvg).toFixed(1)} average rating`
-              : "No ratings yet"}
-          </span>
-        </div>
-
-        {/* Rate this PDF */}
-        {note.review_status === "approved" && (
-          <div className="paper-card p-4">
-            <p className="text-sm font-medium">
-              {note.is_owner
-                ? "You can't rate your own upload"
-                : myRating
-                  ? "Your rating"
-                  : "Rate this PDF"}
-            </p>
-            {!note.is_owner && (
-              <div
-              className="mt-2 flex gap-1"
-              onMouseLeave={() => setHoverRating(0)}
-              >
-                {[1, 2, 3, 4, 5].map((star) => (
-                  <button
-                    key={star}
-                    type="button"
-                    disabled={!canRate || ratingLoading}
-                    onMouseEnter={() => canRate && setHoverRating(star)}
-                    onClick={() => handleRate(star)}
-                    aria-label={`Rate ${star} star${star === 1 ? "" : "s"}`}
-                    className="disabled:cursor-default"
-                  >
-                    <Star
-                      className={`h-6 w-6 ${
-                        (hoverRating || myRating) >= star
-                          ? "fill-highlight text-highlight"
-                          : "text-border"
-                      }`}
-                    />
-                  </button>
-                ))}
-
-                {ratingLoading && (
-                  <LoaderCircle size={22} className="self-center animate-spin" />
-                )}
+      <div className="grid items-start gap-8 lg:grid-cols-[minmax(0,1fr)_360px]">
+        {/* PDF preview */}
+        <div className="min-w-0">
+          <div className="overflow-hidden rounded-3xl border border-border/60 bg-card shadow-2xl shadow-primary/5">
+            <div className="flex items-center justify-between gap-3 border-b border-border/60 px-5 py-3">
+              <div className="flex min-w-0 items-center gap-2">
+                <div className="grid h-8 w-7 shrink-0 place-items-center rounded-md bg-primary text-primary-foreground">
+                  <BookOpen className="h-3.5 w-3.5" />
+                </div>
+                <span className="truncate text-sm font-medium">{note.title}</span>
               </div>
-            )}
-            
-
-            {myRating > 0 && !note.is_owner && (
-              <p className="mt-2 text-xs text-muted-foreground">
-                You rated this {myRating} star{myRating === 1 ? "" : "s"}.
-                Click a star to change it.
-              </p>
-            )}
-
-            {ratingError && (
-              <p className="mt-2 text-xs text-destructive" role="alert">
-                {ratingError}
-              </p>
-            )}
-          </div>
-        )}
-
-        {/* Report this PDF */}
-        {!reportSent ? (
-          reportFormOpen ? (
-            <form
-              className="paper-card space-y-3 p-4"
-              onSubmit={handleReportSubmit}
-            >
-              <div>
-                <label htmlFor="report-reason" className="label-sm">
-                  Reason
-                </label>
-                <select
-                  id="report-reason"
-                  className="field w-full"
-                  value={reportReason}
-                  onChange={(event) => setReportReason(event.target.value)}
-                  disabled={reportLoading}
+              <div className="flex shrink-0 items-center gap-1">
+                <a
+                  href={note.file_url}
+                  download
+                  aria-label="Download PDF"
+                  className="grid h-9 w-9 place-items-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
                 >
-                  {REASONS.map((reason) => (
-                    <option key={reason}>{reason}</option>
-                  ))}
-                </select>
+                  <Download className="h-4 w-4" />
+                </a>
+                <a
+                  href={note.file_url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  aria-label="Open full screen"
+                  className="grid h-9 w-9 place-items-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                >
+                  <ExternalLink className="h-4 w-4" />
+                </a>
               </div>
+            </div>
+            <iframe
+              src={note.file_url}
+              title={note.title}
+              className="aspect-[3/4] max-h-[80vh] min-h-[500px] w-full bg-muted"
+            >
+              <p>
+                Your browser cannot display PDFs.{" "}
+                <a href={note.file_url} target="_blank" rel="noopener noreferrer">
+                  Open it here instead.
+                </a>
+              </p>
+            </iframe>
+          </div>
+        </div>
 
+        {/* Info, rating and report */}
+        <aside className="space-y-5 lg:sticky lg:top-24">
+          <div className="relative overflow-hidden rounded-3xl border border-border/60 bg-card p-6 shadow-xl shadow-primary/5">
+            <div className="pointer-events-none absolute -right-16 -top-16 h-40 w-40 rounded-full bg-primary/15 blur-3xl" />
+
+            <div className="relative flex flex-wrap gap-2">
+              {note.course_code && (
+                <span className="rounded-full border border-primary/20 bg-primary/5 px-3 py-0.5 text-[11px] font-semibold uppercase tracking-[0.14em] text-primary">
+                  {note.course_code}
+                </span>
+              )}
+              <span
+                className={`rounded-full px-3 py-0.5 text-[11px] font-semibold uppercase tracking-[0.14em] ${
+                  note.type === "note"
+                    ? "bg-secondary text-secondary-foreground"
+                    : "bg-highlight/25 text-foreground"
+                }`}
+              >
+                {note.type}
+              </span>
+              {note.review_status !== "approved" && (
+                <StatusPill status={note.review_status} />
+              )}
+            </div>
+
+            <h1 className="relative mt-4 text-2xl font-semibold leading-tight tracking-tight sm:text-3xl">
+              {note.title}
+            </h1>
+
+            {note.description && (
+              <p className="relative mt-3 text-sm leading-relaxed text-muted-foreground">
+                {note.description}
+              </p>
+            )}
+
+            {/* Rating summary */}
+            <div className="relative mt-5 flex items-center gap-3">
+              <span className="font-display text-3xl font-semibold tabular-nums">
+                {avg > 0 ? avg.toFixed(1) : "—"}
+              </span>
               <div>
-                <label htmlFor="report-detail" className="label-sm">
-                  Details (optional)
-                </label>
-                <textarea
-                  id="report-detail"
-                  className="field w-full"
-                  rows={3}
-                  value={reportDetail}
-                  onChange={(event) => setReportDetail(event.target.value)}
-                  placeholder="Help admins understand the problem"
-                  maxLength={1000}
-                  disabled={reportLoading}
-                />
+                <Stars value={avg} />
+                <p className="mt-0.5 text-xs text-muted-foreground">
+                  {ratingCount > 0
+                    ? `${ratingCount} rating${ratingCount === 1 ? "" : "s"}`
+                    : "No ratings yet"}
+                </p>
+              </div>
+            </div>
+
+            {meta.length > 0 && (
+              <dl className="relative mt-5 grid grid-cols-3 gap-2">
+                {meta.map(({ icon: Icon, label, value }) => (
+                  <div key={label} className="rounded-2xl border border-border/60 bg-background/60 px-3 py-2.5">
+                    <dt className="flex items-center gap-1 text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
+                      <Icon className="h-3 w-3" /> {label}
+                    </dt>
+                    <dd className="mt-1 truncate text-sm font-medium">{value}</dd>
+                  </div>
+                ))}
+              </dl>
+            )}
+
+            {/* Uploader */}
+            <Link
+              to="/profile/$id"
+              params={{ id: String(note.uploader_id) }}
+              className="relative mt-5 flex items-center gap-3 rounded-2xl border border-border/60 bg-background/60 p-3 transition-colors hover:border-primary/30 hover:bg-primary/5"
+            >
+              <div className="grid h-10 w-10 place-items-center rounded-xl bg-primary font-display text-sm text-primary-foreground">
+                {uploaderInitials}
+              </div>
+              <div className="min-w-0">
+                <p className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground">Uploaded by</p>
+                <p className="truncate text-sm font-semibold">{note.uploader_name}</p>
+              </div>
+            </Link>
+
+            <div className="relative mt-5 grid grid-cols-2 gap-2">
+              <a
+                href={note.file_url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center justify-center gap-2 rounded-full bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground shadow-lg shadow-primary/25 transition-transform hover:-translate-y-0.5"
+              >
+                <ExternalLink className="h-4 w-4" /> Full screen
+              </a>
+              <a
+                href={note.file_url}
+                download
+                className="inline-flex items-center justify-center gap-2 rounded-full border border-border bg-background px-4 py-2.5 text-sm font-medium transition-colors hover:bg-muted"
+              >
+                <Download className="h-4 w-4" /> Download
+              </a>
+            </div>
+          </div>
+
+          {/* Rate this PDF */}
+          {note.review_status === "approved" && (
+            <div className="rounded-3xl border border-border/60 bg-card p-6">
+              <div className="flex items-center justify-between">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                  {note.is_owner ? "Your upload" : myRating ? "Your rating" : "Rate this PDF"}
+                </p>
+                {ratingLoading && <LoaderCircle className="h-4 w-4 animate-spin text-muted-foreground" />}
               </div>
 
-              {reportError && (
-                <p className="text-xs text-destructive" role="alert">
-                  {reportError}
-                </p>
+              {note.is_owner ? (
+                <p className="mt-2 text-sm text-muted-foreground">You can't rate your own upload.</p>
+              ) : (
+                <>
+                  <div className="mt-3 flex items-center gap-1" onMouseLeave={() => setHoverRating(0)}>
+                    {[1, 2, 3, 4, 5].map((star) => (
+                      <button
+                        key={star}
+                        type="button"
+                        disabled={!canRate || ratingLoading}
+                        onMouseEnter={() => canRate && setHoverRating(star)}
+                        onClick={() => handleRate(star)}
+                        aria-label={`Rate ${star} star${star === 1 ? "" : "s"}`}
+                        className="rounded-lg p-1 transition-transform duration-150 hover:scale-110 disabled:cursor-default disabled:hover:scale-100"
+                      >
+                        <Star
+                          className={`h-7 w-7 transition-colors ${
+                            activeStars >= star ? "fill-highlight text-highlight" : "text-border"
+                          }`}
+                        />
+                      </button>
+                    ))}
+                    <span className="ml-2 text-sm font-medium text-muted-foreground">
+                      {starLabels[activeStars] ?? ""}
+                    </span>
+                  </div>
+
+                  {myRating > 0 && (
+                    <p className="mt-2 text-xs text-muted-foreground">
+                      You rated this {myRating} star{myRating === 1 ? "" : "s"}. Tap a star to change it.
+                    </p>
+                  )}
+                </>
               )}
 
-              <div className="flex gap-2">
-                <button
-                  type="submit"
-                  disabled={reportLoading}
-                  className="btn-primary flex-1 inline-flex items-center justify-center gap-2 disabled:opacity-50"
-                >
-                  {reportLoading ? (
-                    <>
-                      <LoaderCircle size={16} className="animate-spin" />
-                      Sending...
-                    </>
-                  ) : (
-                    "Send report"
-                  )}
-                </button>
+              {ratingError && (
+                <p className="mt-3 rounded-xl border border-destructive/30 bg-destructive/5 p-2.5 text-xs text-destructive" role="alert">
+                  {ratingError}
+                </p>
+              )}
+            </div>
+          )}
 
-                <button
-                  type="button"
-                  onClick={() => setReportFormOpen(false)}
-                  disabled={reportLoading}
-                  className="btn-ghost"
-                >
-                  Cancel
-                </button>
-              </div>
-            </form>
+          {/* Report this PDF */}
+          {!reportSent ? (
+            reportFormOpen ? (
+              <form
+                className="animate-in fade-in slide-in-from-top-1 space-y-4 rounded-3xl border border-destructive/20 bg-card p-6"
+                onSubmit={handleReportSubmit}
+              >
+                <div className="flex items-center gap-2 text-sm font-semibold">
+                  <Flag className="h-4 w-4 text-destructive" /> Report a problem
+                </div>
+
+                <div>
+                  <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">Reason</p>
+                  <div className="flex flex-wrap gap-1.5" role="radiogroup" aria-label="Reason">
+                    {REASONS.map((reason) => (
+                      <button
+                        key={reason}
+                        type="button"
+                        role="radio"
+                        aria-checked={reportReason === reason}
+                        disabled={reportLoading}
+                        onClick={() => setReportReason(reason)}
+                        className={`rounded-full border px-3 py-1 text-xs font-medium transition-all ${
+                          reportReason === reason
+                            ? "border-destructive bg-destructive text-destructive-foreground"
+                            : "border-border bg-background hover:border-destructive/40"
+                        }`}
+                      >
+                        {reason}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div>
+                  <label
+                    htmlFor="report-detail"
+                    className="mb-2 block text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground"
+                  >
+                    Details (optional)
+                  </label>
+                  <textarea
+                    id="report-detail"
+                    className="w-full resize-none rounded-2xl border border-border bg-background px-4 py-3 text-sm outline-none transition-colors focus:border-primary/50 focus:ring-2 focus:ring-primary/15"
+                    rows={3}
+                    value={reportDetail}
+                    onChange={(event) => setReportDetail(event.target.value)}
+                    placeholder="Help admins understand the problem"
+                    maxLength={1000}
+                    disabled={reportLoading}
+                  />
+                  <p className="mt-1 text-right text-[10px] tabular-nums text-muted-foreground">
+                    {reportDetail.length}/1000
+                  </p>
+                </div>
+
+                {reportError && (
+                  <p className="rounded-xl border border-destructive/30 bg-destructive/5 p-2.5 text-xs text-destructive" role="alert">
+                    {reportError}
+                  </p>
+                )}
+
+                <div className="flex gap-2">
+                  <button
+                    type="submit"
+                    disabled={reportLoading}
+                    className="inline-flex flex-1 items-center justify-center gap-2 rounded-full bg-destructive px-4 py-2.5 text-sm font-medium text-destructive-foreground transition-opacity disabled:opacity-50"
+                  >
+                    {reportLoading ? (
+                      <>
+                        <LoaderCircle className="h-4 w-4 animate-spin" /> Sending
+                      </>
+                    ) : (
+                      "Send report"
+                    )}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setReportFormOpen(false)}
+                    disabled={reportLoading}
+                    className="rounded-full border border-border px-4 py-2.5 text-sm font-medium transition-colors hover:bg-muted"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </form>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setReportFormOpen(true)}
+                className="flex w-full items-center justify-center gap-2 rounded-full py-2 text-xs font-medium text-muted-foreground transition-colors hover:text-destructive"
+              >
+                <Flag className="h-3.5 w-3.5" /> Report this PDF
+              </button>
+            )
           ) : (
-            <button
-              type="button"
-              onClick={() => setReportFormOpen(true)}
-              className="flex items-center gap-2 text-sm text-muted-foreground hover:text-destructive"
-            >
-              <Flag size={16} />
-              Report this PDF
-            </button>
-          )
-        ) : (
-          <p className="flex items-center gap-2 text-sm text-success">
-            <Flag size={16} />
-            Report sent to admins.
-          </p>
-        )}
-
-        <Link to="/feeds" className="btn-ghost inline-block">
-          Back to feed
-        </Link>
-      </aside>
+            <div className="flex items-center gap-3 rounded-3xl border border-success/30 bg-success/5 p-4 text-sm">
+              <CheckCircle2 className="h-5 w-5 shrink-0 text-success" />
+              <span>Thanks — your report was sent to the admins.</span>
+            </div>
+          )}
+        </aside>
+      </div>
     </div>
   );
 }

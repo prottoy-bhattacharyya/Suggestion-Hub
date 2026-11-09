@@ -12,6 +12,12 @@ import {
   FileText,
   Star,
   ExternalLink,
+  Hash,
+  Brain,
+  UserPlus,
+  UserCheck,
+  CalendarDays,
+  X,
 } from "lucide-react";
 
 import { PdfCard } from "@/components/PdfCard";
@@ -327,253 +333,248 @@ function SearchPage() {
     setFollowError("");
   }
 
+  const modes = [
+    { key: "keyword" as const, label: "Keyword", Icon: Hash, hint: "Exact words in titles, courses and descriptions" },
+    // { key: "semantic" as const, label: "By meaning", Icon: Brain, hint: "Finds notes about the same idea, even with different words" },
+    // { key: "ai" as const, label: "Ask AI", Icon: Sparkles, hint: "Get an answer drawn from approved notes" },
+    { key: "people" as const, label: "People", Icon: Users, hint: "Students and teachers in your university" },
+  ];
+  const activeMode = modes.find((m) => m.key === mode)!;
+
   return (
-    <div className="mx-auto max-w-3xl px-4 py-12">
-      {/* Page heading */}
-      <div>
-        <h1 className="text-3xl font-semibold">Search</h1>
+    <div className="mx-auto max-w-4xl px-4 py-10 sm:px-6 lg:py-14">
+      {/* Hero */}
+      <section className="relative overflow-hidden rounded-3xl border border-border/60 bg-card px-6 py-10 shadow-xl shadow-primary/5 sm:px-10 sm:py-12">
+        <div className="pointer-events-none absolute -right-20 -top-24 h-64 w-64 rounded-full bg-primary/15 blur-3xl" />
+        <div className="pointer-events-none absolute -bottom-24 -left-10 h-48 w-48 rounded-full bg-primary/10 blur-3xl" />
 
-        <p className="mt-1 text-sm text-muted-foreground">
-          Find course materials, people, and answers.
-        </p>
-      </div>
+        <div className="relative">
+          <span className="inline-flex items-center gap-1.5 rounded-full border border-primary/20 bg-primary/5 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-primary">
+            <Search className="h-3 w-3" /> Discover
+          </span>
+          <h1 className="mt-4 text-4xl font-semibold tracking-tight sm:text-5xl">
+            Find what you <span className="text-primary">need</span>
+          </h1>
+          <p className="mt-3 max-w-lg text-sm leading-relaxed text-muted-foreground sm:text-base">
+            Course materials, people and answers — all in one place.
+          </p>
 
-      {/* Search modes */}
-      <div className="mt-5 flex flex-wrap gap-1 rounded-md border border-border bg-card p-1">
-        {(
-          ["keyword", "semantic", "ai", "people"] as const
-        ).map((m) => (
-          <button
-            key={m}
-            type="button"
-            onClick={() => changeMode(m)}
-            className={`rounded px-3 py-2 text-sm transition-colors ${
-              mode === m
-                ? "bg-primary text-primary-foreground"
-                : "text-muted-foreground hover:text-foreground"
-            }`}
-          >
-            {m === "keyword"
-              ? "Keyword"
-              : m === "semantic"
-                ? "By meaning"
-                : m === "ai"
-                  ? "Ask AI"
-                  : "People"}
-          </button>
-        ))}
-      </div>
+          {/* Mode switcher */}
+          <div className="mt-8 grid grid-cols-2 gap-1 rounded-2xl bg-muted p-1 sm:inline-grid sm:grid-cols-4">
+            {modes.map(({ key, label, Icon }) => (
+              <button
+                key={key}
+                type="button"
+                aria-pressed={mode === key}
+                onClick={() => changeMode(key)}
+                className={`inline-flex items-center justify-center gap-1.5 rounded-xl px-4 py-2 text-sm font-medium transition-all ${
+                  mode === key
+                    ? "bg-background text-foreground shadow-sm"
+                    : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                <Icon className={`h-4 w-4 ${mode === key ? "text-primary" : ""}`} />
+                {label}
+              </button>
+            ))}
+          </div>
 
-      {/* Search input */}
-      <div className="relative mt-4">
-        {mode === "people" ? (
-          <Users
-            className="absolute left-4 top-1/2 -translate-y-1/2 text-muted-foreground"
-            size={19}
-          />
-        ) : (
-          <Search
-            className="absolute left-4 top-1/2 -translate-y-1/2 text-muted-foreground"
-            size={19}
-          />
-        )}
-
-        <input
-          className="field w-full py-3 pl-11 text-base"
-          value={q}
-          onChange={(e) => setQ(e.target.value)}
-          placeholder={
-            mode === "ai"
-              ? "e.g. How does an LR rotation work?"
-              : mode === "people"
-                ? "Search by name, email, or department..."
-                : "Search titles, courses, descriptions..."
-          }
-        />
-      </div>
+          {/* Search input */}
+          <div className="group relative mt-4">
+            <div className="pointer-events-none absolute left-5 top-1/2 -translate-y-1/2 text-muted-foreground transition-colors group-focus-within:text-primary">
+              {mode === "people" ? <Users size={20} /> : mode === "ai" ? <Sparkles size={20} /> : <Search size={20} />}
+            </div>
+            <input
+              autoFocus
+              className="w-full rounded-2xl border border-border bg-background py-4 pl-14 pr-14 text-base shadow-sm outline-none transition-all placeholder:text-muted-foreground/70 focus:border-primary/50 focus:shadow-lg focus:shadow-primary/10 focus:ring-4 focus:ring-primary/10"
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+              placeholder={
+                mode === "ai"
+                  ? "e.g. How does an LR rotation work?"
+                  : mode === "people"
+                    ? "Search by name, email, or department..."
+                    : "Search titles, courses, descriptions..."
+              }
+            />
+            <div className="absolute right-4 top-1/2 -translate-y-1/2">
+              {keywordLoading || peopleLoading ? (
+                <LoaderCircle className="h-5 w-5 animate-spin text-primary" />
+              ) : q ? (
+                <button
+                  type="button"
+                  onClick={() => setQ("")}
+                  aria-label="Clear search"
+                  className="grid h-7 w-7 place-items-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              ) : null}
+            </div>
+          </div>
+          <p className="mt-3 text-xs text-muted-foreground">{activeMode.hint}</p>
+        </div>
+      </section>
 
       {/* Keyword PDF search */}
       {mode === "keyword" && (
-        <div className="mt-6 space-y-3">
-          {!q.trim() && (
-            <p className="py-10 text-center text-sm text-muted-foreground">
-              Search notes by title, course, or description.
-            </p>
+        <div className="mt-8 space-y-3">
+          {!q.trim() && <EmptyState icon={<Hash className="h-5 w-5" />} text="Search notes by title, course, or description." />}
+
+          {keywordLoading && <SkeletonList />}
+
+          {keywordError && <ErrorBox>{keywordError}</ErrorBox>}
+
+          {!keywordLoading && !keywordError && q.trim() && keywordNotes.length === 0 && (
+            <EmptyState icon={<FileText className="h-5 w-5" />} text="No notes found. Try another keyword." />
           )}
 
-          {keywordLoading && (
-            <div className="flex items-center justify-center gap-2 py-8 text-sm text-muted-foreground">
-              <LoaderCircle size={18} className="animate-spin" />
-              Searching notes...
-            </div>
-          )}
-
-          {keywordError && (
-            <div
-              className="rounded-md border border-red-500/30 bg-red-500/5 p-3 text-sm text-red-500"
-              role="alert"
-            >
-              {keywordError}
-            </div>
+          {!keywordLoading && !keywordError && keywordNotes.length > 0 && (
+            <ResultCount count={keywordNotes.length} noun="note" />
           )}
 
           {!keywordLoading &&
             !keywordError &&
-            q.trim() &&
-            keywordNotes.length === 0 && (
-              <p className="py-10 text-center text-muted-foreground">
-                No notes found. Try another keyword.
-              </p>
-            )}
-
-          {!keywordLoading &&
-            !keywordError &&
-            keywordNotes.map((note) => (
-              <KeywordNoteCard key={note.id} note={note} />
+            keywordNotes.map((note, i) => (
+              <Reveal key={note.id} index={i}>
+                <KeywordNoteCard note={note} />
+              </Reveal>
             ))}
         </div>
       )}
 
       {/* People search */}
       {mode === "people" && (
-        <div className="mt-6 space-y-3">
-          {!q.trim() && (
-            <p className="py-10 text-center text-sm text-muted-foreground">
-              Search for students and teachers in your university.
-            </p>
-          )}
+        <div className="mt-8 space-y-3">
+          {!q.trim() && <EmptyState icon={<Users className="h-5 w-5" />} text="Search for students and teachers in your university." />}
 
           {q.trim().length === 1 && (
-            <p className="py-6 text-center text-sm text-muted-foreground">
-              Enter at least 2 characters to search.
-            </p>
+            <p className="py-6 text-center text-sm text-muted-foreground">Enter at least 2 characters to search.</p>
           )}
 
-          {peopleLoading && (
-            <div className="flex items-center justify-center gap-2 py-8 text-sm text-muted-foreground">
-              <LoaderCircle size={18} className="animate-spin" />
-              Searching people...
-            </div>
+          {peopleLoading && <SkeletonList />}
+
+          {peopleError && <ErrorBox>{peopleError}</ErrorBox>}
+
+          {!peopleLoading && !peopleError && q.trim().length >= 2 && people.length === 0 && (
+            <EmptyState icon={<Users className="h-5 w-5" />} text="No people found. Try another name or email." />
           )}
 
-          {peopleError && (
-            <div
-              className="rounded-md border border-red-500/30 bg-red-500/5 p-3 text-sm text-red-500"
-              role="alert"
-            >
-              {peopleError}
-            </div>
-          )}
+          {followError && <ErrorBox>{followError}</ErrorBox>}
 
-          {!peopleLoading &&
-            !peopleError &&
-            q.trim().length >= 2 &&
-            people.length === 0 && (
-              <p className="py-10 text-center text-muted-foreground">
-                No people found. Try another name or email.
-              </p>
-            )}
+          {!peopleLoading && people.length > 0 && <ResultCount count={people.length} noun="person" plural="people" />}
 
-          {!peopleLoading &&
-            people.map((person) => (
-              <div
-                key={person.id}
-                className="paper-card flex items-center gap-4 p-4"
-              >
-                <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-secondary text-lg font-semibold text-primary">
-                  {person.name.charAt(0).toUpperCase()}
-                </div>
+          {!peopleLoading && people.length > 0 && (
+            <div className="grid gap-3 sm:grid-cols-2">
+              {people.map((person, i) => {
+                const initials = person.name
+                  .split(" ")
+                  .map((w) => w[0])
+                  .join("")
+                  .slice(0, 2)
+                  .toUpperCase();
+                const pending = followPendingId === person.id;
+                return (
+                  <Reveal key={person.id} index={i}>
+                    <div className="group flex h-full flex-col rounded-2xl border border-border/60 bg-card p-5 transition-all duration-300 hover:-translate-y-0.5 hover:border-primary/30 hover:shadow-lg hover:shadow-primary/5">
+                      <div className="flex items-start gap-4">
+                        <div className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-primary font-display text-base text-primary-foreground shadow-md shadow-primary/20">
+                          {initials}
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <Link
+                            to="/profile/$id"
+                            params={{ id: String(person.id) }}
+                            className="block truncate font-semibold tracking-tight hover:text-primary"
+                          >
+                            {person.name}
+                          </Link>
+                          {(person.designation || person.accountType) && (
+                            <span className="mt-1 inline-block rounded-full bg-primary/10 px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-primary">
+                              {person.designation || person.accountType}
+                            </span>
+                          )}
+                        </div>
+                      </div>
 
-                <div className="min-w-0 flex-1">
-                  <Link
-                    to="/profile/$id"
-                    params={{ id: String(person.id) }}
-                    className="block truncate font-semibold hover:underline"
-                  >
-                    {person.name}
-                  </Link>
+                      <div className="mt-4 space-y-1.5 text-xs text-muted-foreground">
+                        {person.email && (
+                          <p className="flex items-center gap-2 truncate">
+                            <Mail size={13} className="shrink-0" /> {person.email}
+                          </p>
+                        )}
+                        {person.department && (
+                          <p className="flex items-center gap-2 truncate">
+                            <Building2 size={13} className="shrink-0" /> {person.department}
+                          </p>
+                        )}
+                      </div>
 
-                  {person.email && (
-                    <p className="mt-1 flex items-center gap-2 truncate text-sm text-muted-foreground">
-                      <Mail size={14} className="shrink-0" />
-                      {person.email}
-                    </p>
-                  )}
-
-                  {person.department && (
-                    <p className="mt-1 flex items-center gap-2 truncate text-xs text-muted-foreground">
-                      <Building2 size={14} className="shrink-0" />
-                      {person.department}
-                    </p>
-                  )}
-
-                  {(person.designation || person.accountType) && (
-                    <p className="mt-1 text-xs text-primary">
-                      {person.designation || person.accountType}
-                    </p>
-                  )}
-                </div>
-
-                <div className="shrink-0 text-right">
-                  <button
-                    type="button"
-                    onClick={() => toggleFollow(person)}
-                    disabled={followPendingId === person.id}
-                    className={
-                      person.is_following
-                        ? "rounded-md border border-border px-4 py-2 text-sm transition-colors hover:bg-secondary disabled:opacity-50"
-                        : "rounded-md bg-primary px-4 py-2 text-sm text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-50"
-                    }
-                  >
-                    {followPendingId === person.id
-                      ? "..."
-                      : person.is_following
-                        ? "Following"
-                        : "Follow"}
-                  </button>
-
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    {person.followers}{" "}
-                    {person.followers === 1 ? "follower" : "followers"}
-                  </p>
-                </div>
-              </div>
-            ))}
-
-          {followError && (
-            <div
-              className="rounded-md border border-red-500/30 bg-red-500/5 p-3 text-sm text-red-500"
-              role="alert"
-            >
-              {followError}
+                      <div className="mt-auto flex items-center justify-between gap-3 border-t border-border/60 pt-4">
+                        <p className="text-xs text-muted-foreground">
+                          <span className="font-display text-base font-semibold tabular-nums text-foreground">{person.followers}</span>{" "}
+                          follower{person.followers === 1 ? "" : "s"}
+                        </p>
+                        <button
+                          type="button"
+                          onClick={() => toggleFollow(person)}
+                          disabled={pending}
+                          className={`inline-flex items-center gap-1.5 rounded-full px-4 py-1.5 text-xs font-medium transition-all disabled:opacity-50 ${
+                            person.is_following
+                              ? "border border-border bg-background hover:bg-muted"
+                              : "bg-primary text-primary-foreground shadow-md shadow-primary/20 hover:-translate-y-0.5"
+                          }`}
+                        >
+                          {pending ? (
+                            <LoaderCircle className="h-3.5 w-3.5 animate-spin" />
+                          ) : person.is_following ? (
+                            <UserCheck className="h-3.5 w-3.5" />
+                          ) : (
+                            <UserPlus className="h-3.5 w-3.5" />
+                          )}
+                          {person.is_following ? "Following" : "Follow"}
+                        </button>
+                      </div>
+                    </div>
+                  </Reveal>
+                );
+              })}
             </div>
           )}
         </div>
       )}
 
       {/* AI search */}
+      {mode === "ai" && !q && (
+        <div className="mt-8">
+          <EmptyState icon={<Sparkles className="h-5 w-5" />} text="Ask a question and get an answer drawn from approved notes." />
+        </div>
+      )}
       {mode === "ai" && q && (
-        <div className="paper-card mt-6 p-6">
-          <div className="flex items-center gap-2 text-sm font-semibold text-primary">
-            <Sparkles className="h-4 w-4" />
-            Answer from approved notes
+        <div className="animate-in fade-in slide-in-from-bottom-2 relative mt-8 overflow-hidden rounded-3xl border border-primary/20 bg-card p-6 shadow-xl shadow-primary/5 sm:p-8">
+          <div className="pointer-events-none absolute -right-16 -top-16 h-40 w-40 rounded-full bg-primary/15 blur-3xl" />
+          <div className="relative flex items-center gap-2">
+            <div className="grid h-8 w-8 place-items-center rounded-xl bg-primary text-primary-foreground">
+              <Sparkles className="h-4 w-4" />
+            </div>
+            <span className="text-[11px] font-semibold uppercase tracking-[0.14em] text-primary">
+              Answer from approved notes
+            </span>
           </div>
 
-          <p className="mt-3 leading-relaxed">
-            An LR rotation fixes a left-right imbalance: first
-            rotate the left child to the left, then rotate the
-            unbalanced node to the right. The result restores the
-            AVL height property.
+          <p className="relative mt-5 text-base leading-relaxed">
+            An LR rotation fixes a left-right imbalance: first rotate the left child to the left, then rotate the
+            unbalanced node to the right. The result restores the AVL height property.
           </p>
 
-          <div className="mt-4 text-xs text-muted-foreground">
-            Sources:{" "}
+          <div className="relative mt-6 border-t border-border/60 pt-4">
+            <p className="mb-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">Sources</p>
             <Link
               to="/pdf/$id"
               params={{ id: "p1" }}
-              className="text-primary underline"
+              className="inline-flex items-center gap-2 rounded-full border border-border bg-background px-3 py-1.5 text-xs font-medium transition-colors hover:border-primary/40 hover:text-primary"
             >
-              AVL Trees — p. 6
+              <FileText className="h-3.5 w-3.5" /> AVL Trees — p. 6
             </Link>
           </div>
         </div>
@@ -581,26 +582,22 @@ function SearchPage() {
 
       {/* Semantic PDF search — still using existing mock data */}
       {mode === "semantic" && (
-        <div className="mt-6 space-y-3">
-          {!q.trim() && (
-            <p className="py-10 text-center text-sm text-muted-foreground">
-              Search for notes with similar meaning.
-            </p>
-          )}
+        <div className="mt-8 space-y-4">
+          {!q.trim() && <EmptyState icon={<Brain className="h-5 w-5" />} text="Search for notes with similar meaning." />}
+
+          {semanticResults.length > 0 && <ResultCount count={semanticResults.length} noun="match" plural="matches" />}
 
           {semanticResults.map((pdf, index) => (
-            <div key={pdf.id}>
-              <p className="mb-1 text-xs text-muted-foreground">
-                Best match on page {(index % 5) + 2}
+            <Reveal key={pdf.id} index={index}>
+              <p className="mb-1.5 inline-flex items-center gap-1.5 text-[11px] font-medium text-primary">
+                <Sparkles className="h-3 w-3" /> Best match on page {(index % 5) + 2}
               </p>
               <PdfCard pdf={pdf} />
-            </div>
+            </Reveal>
           ))}
 
           {q.trim() && semanticResults.length === 0 && (
-            <p className="py-10 text-center text-muted-foreground">
-              No results found.
-            </p>
+            <EmptyState icon={<Brain className="h-5 w-5" />} text="No results found." />
           )}
         </div>
       )}
@@ -608,82 +605,134 @@ function SearchPage() {
   );
 }
 
+function Reveal({ index, children }: { index: number; children: ReactNode }) {
+  return (
+    <div
+      className="animate-in fade-in slide-in-from-bottom-2 fill-mode-both"
+      style={{ animationDelay: `${Math.min(index, 6) * 50}ms` }}
+    >
+      {children}
+    </div>
+  );
+}
+
+function EmptyState({ icon, text }: { icon: ReactNode; text: string }) {
+  return (
+    <div className="flex flex-col items-center rounded-3xl border border-dashed border-border py-14 text-center">
+      <div className="mb-3 grid h-12 w-12 place-items-center rounded-2xl bg-muted text-muted-foreground">{icon}</div>
+      <p className="max-w-xs text-sm text-muted-foreground">{text}</p>
+    </div>
+  );
+}
+
+function ErrorBox({ children }: { children: ReactNode }) {
+  return (
+    <div className="rounded-2xl border border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive" role="alert">
+      {children}
+    </div>
+  );
+}
+
+function ResultCount({ count, noun, plural }: { count: number; noun: string; plural?: string }) {
+  return (
+    <p className="text-sm text-muted-foreground">
+      <span className="font-semibold text-foreground">{count}</span>{" "}
+      {count === 1 ? noun : plural ?? `${noun}s`} found
+    </p>
+  );
+}
+
+function SkeletonList() {
+  return (
+    <div className="space-y-3">
+      {Array.from({ length: 3 }).map((_, i) => (
+        <div key={i} className="animate-pulse rounded-2xl border border-border/60 bg-card p-6">
+          <div className="flex gap-4">
+            <div className="h-12 w-12 rounded-xl bg-muted" />
+            <div className="flex-1 space-y-2">
+              <div className="h-4 w-1/3 rounded bg-muted" />
+              <div className="h-3 w-2/3 rounded bg-muted" />
+            </div>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 // Card for a note returned by the keyword search API.
 function KeywordNoteCard({ note }: { note: SearchNote }) {
   const rating = Number(note.rating_avg);
+  const date = note.approved_at
+    ? new Date(note.approved_at).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" })
+    : null;
 
   return (
-    <article className="paper-card p-5">
+    <article className="group rounded-2xl border border-border/60 bg-card p-5 transition-all duration-300 hover:-translate-y-0.5 hover:border-primary/30 hover:shadow-lg hover:shadow-primary/5 sm:p-6">
       <div className="flex items-start gap-4">
-        <div className="grid h-12 w-10 shrink-0 place-items-center rounded-sm bg-primary text-primary-foreground">
+        <div className="grid h-14 w-11 shrink-0 place-items-center rounded-lg bg-gradient-to-br from-primary to-primary/70 text-primary-foreground shadow-md shadow-primary/20">
           <FileText className="h-5 w-5" />
         </div>
 
         <div className="min-w-0 flex-1">
           <div className="mb-2 flex flex-wrap items-center gap-2">
-            <span className="chip bg-secondary text-secondary-foreground">
-              {note.type}
-            </span>
-
             {note.course_code && (
-              <span className="chip bg-secondary text-secondary-foreground">
+              <span className="rounded-full border border-primary/20 bg-primary/5 px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-primary">
                 {note.course_code}
               </span>
             )}
-
+            <span className="rounded-full bg-secondary px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-secondary-foreground">
+              {note.type}
+            </span>
             <span className="text-xs text-muted-foreground">
               Intake {note.intake} · Section {note.section}
             </span>
           </div>
 
-          <h2 className="font-display text-lg leading-snug">
-            {note.title}
-          </h2>
+          <h2 className="font-display text-lg font-semibold leading-snug tracking-tight">{note.title}</h2>
 
           {note.description && (
-            <p className="mt-1 text-sm text-muted-foreground">
-              {note.description}
-            </p>
+            <p className="mt-1 line-clamp-2 text-sm leading-relaxed text-muted-foreground">{note.description}</p>
           )}
 
-          <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-muted-foreground">
-            <span>
-              By{" "}
+          <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-border/60 pt-4">
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
+              <span>
+                By{" "}
+                <Link
+                  to="/profile/$id"
+                  params={{ id: String(note.author_id) }}
+                  className="font-medium text-foreground hover:text-primary"
+                >
+                  {note.author_name}
+                </Link>
+              </span>
+              {date && (
+                <span className="inline-flex items-center gap-1">
+                  <CalendarDays className="h-3.5 w-3.5" /> {date}
+                </span>
+              )}
+              <span className="inline-flex items-center gap-1">
+                <Star className="h-3.5 w-3.5 fill-highlight text-highlight" />
+                <span className="font-medium text-foreground">
+                  {Number.isFinite(rating) ? rating.toFixed(1) : "0.0"}
+                </span>
+                <span>({note.rating_count})</span>
+              </span>
+            </div>
+
+            {note.file_url ? (
               <Link
-                to="/profile/$id"
-                params={{ id: String(note.author_id) }}
-                className="font-medium text-foreground hover:underline"
+                to="/pdf/$id"
+                params={{ id: String(note.id) }}
+                className="inline-flex items-center gap-1.5 rounded-full bg-primary px-4 py-2 text-xs font-medium text-primary-foreground shadow-md shadow-primary/20 transition-transform hover:-translate-y-0.5"
               >
-                {note.author_name}
+                View PDF <ExternalLink className="h-3.5 w-3.5" />
               </Link>
-            </span>
-
-            <span className="inline-flex items-center gap-1">
-              <Star className="h-3.5 w-3.5 fill-highlight text-highlight" />
-              {Number.isFinite(rating) ? rating.toFixed(1) : "0.0"}
-            </span>
-
-            <span>
-              ({note.rating_count}{" "}
-              {note.rating_count === 1 ? "rating" : "ratings"})
-            </span>
+            ) : (
+              <p className="text-xs text-destructive">PDF file is not available.</p>
+            )}
           </div>
-
-          {note.file_url ? (
-            <Link
-              to="/pdf/$id"
-              params={{ id: String(note.id) }}
-              className="btn-primary mt-4 inline-flex items-center gap-2"
-            >
-              <FileText className="h-4 w-4" />
-              View PDF
-              <ExternalLink className="h-3.5 w-3.5" />
-            </Link>
-          ) : (
-            <p className="mt-3 text-xs text-destructive">
-              PDF file is not available.
-            </p>
-          )}
         </div>
       </div>
     </article>

@@ -1,12 +1,16 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   CheckCircle2,
+  Circle,
   UploadCloud,
   FileText,
   X,
   LoaderCircle,
   AlertCircle,
+  ShieldCheck,
+  GraduationCap,
+  BookOpenCheck,
 } from "lucide-react";
 import axios from "axios";
 
@@ -40,17 +44,37 @@ type Course = {
 
 const MAX_FILE_SIZE = 20 * 1024 * 1024; // 20 MB
 
+const TYPES = [
+  {
+    value: "note",
+    label: "Note",
+    hint: "Class notes, summaries, worked solutions",
+  },
+  {
+    value: "suggestion",
+    label: "Suggestion",
+    hint: "Exam suggestions and likely questions",
+  },
+] as const;
+
+function formatSize(bytes: number) {
+  if (bytes < 1024 * 1024) return `${Math.max(1, Math.round(bytes / 1024))} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
+}
+
 function Upload() {
   const [file, setFile] = useState<File | null>(null);
   const [title, setTitle] = useState("");
   const [courseId, setCourseId] = useState("");
-  const [type, setType] = useState("note");
+  const [type, setType] = useState<string>("note");
   const [intake, setIntake] = useState("");
   const [section, setSection] = useState("");
   const [description, setDescription] = useState("");
 
   const [done, setDone] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [progress, setProgress] = useState(0);
+  const [dragging, setDragging] = useState(false);
 
   const [courses, setCourses] = useState<Course[]>([]);
   const [coursesLoading, setCoursesLoading] = useState(true);
@@ -60,6 +84,8 @@ function Upload() {
   const [successMessage, setSuccessMessage] = useState(
     "Your PDF has been submitted successfully.",
   );
+
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Load courses from Django.
   useEffect(() => {
@@ -88,8 +114,7 @@ function Upload() {
         }
 
         setCourses(courseList);
-      } 
-      catch (err: unknown) {
+      } catch (err: unknown) {
         if (!active) return;
 
         console.error("Error fetching courses:", err);
@@ -102,9 +127,7 @@ function Upload() {
           );
         } else {
           setCoursesError(
-            err instanceof Error
-              ? err.message
-              : "Failed to load courses.",
+            err instanceof Error ? err.message : "Failed to load courses.",
           );
         }
       } finally {
@@ -119,16 +142,12 @@ function Upload() {
     };
   }, []);
 
-  // Validate the selected PDF.
-  function handleFileChange(
-    e: React.ChangeEvent<HTMLInputElement>,
-  ) {
-    const selectedFile = e.target.files?.[0] ?? null;
-
+  // Validate a PDF coming from the picker or from drag and drop.
+  function acceptFile(selectedFile: File | null): boolean {
     setError("");
     setFile(null);
 
-    if (!selectedFile) return;
+    if (!selectedFile) return false;
 
     const isPdf =
       selectedFile.type === "application/pdf" ||
@@ -136,39 +155,48 @@ function Upload() {
 
     if (!isPdf) {
       setError("Only PDF files are allowed.");
-      e.target.value = "";
-      return;
-    }
-
-    if (selectedFile.size > MAX_FILE_SIZE) {
-      setError("File size must be 20 MB or less.");
-      e.target.value = "";
-      return;
+      return false;
     }
 
     if (selectedFile.size === 0) {
       setError("The selected file is empty.");
-      e.target.value = "";
-      return;
+      return false;
+    }
+
+    if (selectedFile.size > MAX_FILE_SIZE) {
+      setError("File size must be 20 MB or less.");
+      return false;
     }
 
     setFile(selectedFile);
+    return true;
+  }
+
+  function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const ok = acceptFile(e.target.files?.[0] ?? null);
+    if (!ok) e.target.value = "";
+  }
+
+  function handleDrop(e: React.DragEvent<HTMLLabelElement>) {
+    e.preventDefault();
+    setDragging(false);
+    if (loading) return;
+
+    const dropped = e.dataTransfer.files?.[0] ?? null;
+    const ok = acceptFile(dropped);
+
+    // Keep the hidden input in sync so "Change" and "Remove" behave.
+    if (!ok && fileInputRef.current) fileInputRef.current.value = "";
   }
 
   function removeFile() {
     setFile(null);
-
-    const input = document.getElementById(
-      "pdf-file",
-    ) as HTMLInputElement | null;
-
-    if (input) input.value = "";
+    setError("");
+    if (fileInputRef.current) fileInputRef.current.value = "";
   }
 
   // Submit the PDF to Django.
-  async function handleSubmit(
-    e: React.FormEvent<HTMLFormElement>,
-  ) {
+  async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
 
     setError("");
@@ -195,6 +223,7 @@ function Upload() {
 
     try {
       setLoading(true);
+      setProgress(0);
 
       const csrfToken = await getCSRFToken();
 
@@ -209,20 +238,21 @@ function Upload() {
       formData.append("section", section.trim());
       formData.append("description", description.trim());
 
-      const response = await api.post(
-        "/notes/upload/",
-        formData,
-        {
-          headers: {
-            Accept: "application/json",
-            ...(csrfToken ? { "X-CSRFToken": csrfToken } : {}),
-          },
+      const response = await api.post("/notes/upload/", formData, {
+        headers: {
+          Accept: "application/json",
+          ...(csrfToken ? { "X-CSRFToken": csrfToken } : {}),
         },
-      );
+        onUploadProgress: (event) => {
+          const total = event.total ?? file.size;
+          if (total > 0) {
+            setProgress(Math.min(100, Math.round((event.loaded / total) * 100)));
+          }
+        },
+      });
 
       setSuccessMessage(
-        response.data?.message ??
-          "Your PDF has been submitted successfully.",
+        response.data?.message ?? "Your PDF has been submitted successfully.",
       );
 
       setDone(true);
@@ -233,10 +263,7 @@ function Upload() {
         const data = err.response?.data;
 
         if (data && typeof data === "object") {
-          const message =
-            data.error ??
-            data.detail ??
-            data.message;
+          const message = data.error ?? data.detail ?? data.message;
 
           if (typeof message === "string") {
             setError(message);
@@ -253,8 +280,7 @@ function Upload() {
               .join(" ");
 
             setError(
-              fieldErrors ||
-                `Upload failed (HTTP ${err.response?.status}).`,
+              fieldErrors || `Upload failed (HTTP ${err.response?.status}).`,
             );
           }
         } else if (err.response) {
@@ -268,9 +294,7 @@ function Upload() {
         }
       } else {
         setError(
-          err instanceof Error
-            ? err.message
-            : "An unexpected error occurred.",
+          err instanceof Error ? err.message : "An unexpected error occurred.",
         );
       }
     } finally {
@@ -278,24 +302,91 @@ function Upload() {
     }
   }
 
+  const selectedCourse = courses.find((c) => String(c.id) === courseId);
+  const selectedType = TYPES.find((t) => t.value === type) ?? TYPES[0];
+
+  // What the person still has to fill in before they can submit.
+  const requirements = [
+    { label: "PDF selected", met: Boolean(file) },
+    { label: "Title added", met: Boolean(title.trim()) },
+    { label: "Course chosen", met: Boolean(courseId) },
+    {
+      label: "Intake and section added",
+      met: Boolean(intake.trim() && section.trim()),
+    },
+  ];
+  const missing = requirements.filter((r) => !r.met);
+  const ready = missing.length === 0;
+
+  const reviewSteps = [
+    {
+      icon: ShieldCheck,
+      title: "File check",
+      text: "We make sure the PDF opens, isn't encrypted, and isn't a duplicate.",
+    },
+    {
+      icon: GraduationCap,
+      title: "Teacher review",
+      text: "A teacher for the course checks that the content is accurate.",
+    },
+    {
+      icon: BookOpenCheck,
+      title: "Published",
+      text: "Students in your course can find and rate it.",
+    },
+  ];
+
   // Success screen.
   if (done) {
+    const summary = [
+      { label: "Title", value: title.trim() },
+      {
+        label: "Course",
+        value: selectedCourse
+          ? `${selectedCourse.code} — ${selectedCourse.title}`
+          : "—",
+      },
+      { label: "Type", value: selectedType.label },
+      { label: "Intake and section", value: `${intake.trim()} / ${section.trim()}` },
+    ];
+
     return (
-      <div className="mx-auto max-w-md px-4 py-24 text-center">
-        <CheckCircle2 className="mx-auto h-14 w-14 text-success" />
+      <div className="mx-auto max-w-lg px-4 py-20">
+        <style>{`
+          @keyframes upload-pop { 0% { transform: scale(.6); opacity: 0 } 60% { transform: scale(1.08); opacity: 1 } 100% { transform: scale(1) } }
+          .upload-pop { animation: upload-pop .5s cubic-bezier(.2,.8,.2,1) both }
+          @media (prefers-reduced-motion: reduce) { .upload-pop { animation: none } }
+        `}</style>
 
-        <h1 className="mt-4 text-3xl font-semibold">
-          Sent for review
-        </h1>
+        <div className="text-center">
+          <span className="upload-pop mx-auto grid h-16 w-16 place-items-center rounded-full bg-success/10">
+            <CheckCircle2 className="h-9 w-9 text-success" />
+          </span>
 
-        <p className="mt-3 text-muted-foreground">
-          {successMessage}
-        </p>
+          <h1 className="mt-6 text-3xl font-semibold tracking-tight">
+            Sent for review
+          </h1>
 
-        <p className="mt-2 text-sm text-muted-foreground">
-          Your submission is pending review. Other users can see it
-          after a course teacher approves it.
-        </p>
+          <p className="mt-3 text-muted-foreground">{successMessage}</p>
+          <p className="mx-auto mt-2 max-w-sm text-sm leading-relaxed text-muted-foreground">
+            Other students will see it once a teacher for the course approves
+            it.
+          </p>
+        </div>
+
+        <dl className="paper-card mt-8 divide-y divide-border">
+          {summary.map((row) => (
+            <div
+              key={row.label}
+              className="flex items-baseline justify-between gap-6 px-5 py-3 text-sm"
+            >
+              <dt className="shrink-0 text-muted-foreground">{row.label}</dt>
+              <dd className="min-w-0 truncate text-right font-medium">
+                {row.value}
+              </dd>
+            </div>
+          ))}
+        </dl>
 
         <div className="mt-6 flex flex-col gap-3">
           <Link
@@ -318,6 +409,7 @@ function Upload() {
               setSection("");
               setDescription("");
               setError("");
+              setProgress(0);
             }}
             className="btn-ghost"
           >
@@ -328,50 +420,126 @@ function Upload() {
     );
   }
 
-  const checks = [
-    "PDF file selected",
-    "File size is under 20 MB",
-    "File format is PDF",
-    "Server checks for corrupted or encrypted files",
-    "Server checks page count and duplicates",
-  ];
-
-  const fileValid = Boolean(file);
-
   return (
-    <div className="mx-auto max-w-3xl px-4 py-12">
-      <h1 className="text-3xl font-semibold">Upload a PDF</h1>
+    <div className="mx-auto max-w-5xl px-4 py-12 sm:py-16">
+      <header className="max-w-xl">
+        <h1 className="text-4xl font-semibold tracking-tight">
+          Upload a PDF
+        </h1>
 
-      <p className="mt-2 text-sm text-muted-foreground">
-        Share your notes or exam suggestions with your university
-        community.
-      </p>
+        <p className="mt-3 leading-relaxed text-muted-foreground">
+          Share your notes or exam suggestions with your university community.
+          A teacher reviews every upload before it goes live.
+        </p>
+      </header>
 
       <form
-        className="mt-6 grid gap-6 md:grid-cols-[1fr_260px]"
+        className="mt-10 grid items-start gap-8 lg:grid-cols-[minmax(0,1fr)_300px]"
         onSubmit={handleSubmit}
+        noValidate
       >
         {/* Main form */}
-        <div className="paper-card grid gap-4 p-6 sm:grid-cols-2">
+        <div className="paper-card divide-y divide-border">
+          {/* File */}
+          <section className="p-6 sm:p-8">
+            <h2 className="text-lg font-semibold">Your file</h2>
+            <p className="mt-1 text-sm text-muted-foreground">
+              PDF only, up to 20 MB.
+            </p>
 
-          {/* PDF selection */}
-          <div className="sm:col-span-2">
-            <label
-              htmlFor="pdf-file"
-              className="grid cursor-pointer place-items-center gap-3 rounded-md border-2 border-dashed border-border p-8 text-center transition-colors hover:bg-secondary"
-            >
-              <UploadCloud className="h-9 w-9 text-primary" />
+            {!file ? (
+              <label
+                htmlFor="pdf-file"
+                onDragOver={(e) => {
+                  e.preventDefault();
+                  if (!loading) setDragging(true);
+                }}
+                onDragLeave={() => setDragging(false)}
+                onDrop={handleDrop}
+                className={`mt-5 grid cursor-pointer place-items-center gap-3 rounded-xl border-2 border-dashed px-6 py-14 text-center transition-colors focus-within:ring-2 focus-within:ring-primary/40 ${
+                  dragging
+                    ? "border-primary bg-primary/5"
+                    : "border-border hover:border-primary/50 hover:bg-secondary/60"
+                }`}
+              >
+                <span
+                  className={`grid h-14 w-14 place-items-center rounded-full transition-colors ${
+                    dragging ? "bg-primary text-white" : "bg-primary/10 text-primary"
+                  }`}
+                >
+                  <UploadCloud className="h-7 w-7" />
+                </span>
 
-              <span className="text-sm font-medium">
-                {file ? "Change PDF file" : "Choose a PDF file"}
-              </span>
+                <span className="text-base font-medium">
+                  {dragging ? "Drop to add your PDF" : "Drag a PDF here"}
+                </span>
 
-              <span className="text-xs text-muted-foreground">
-                PDF only · Maximum 20 MB
-              </span>
-            </label>
+                <span className="text-sm text-muted-foreground">
+                  or <span className="font-medium text-primary underline underline-offset-4">browse your files</span>
+                </span>
+              </label>
+            ) : (
+              <div className="mt-5 rounded-xl border border-border bg-secondary/40 p-4">
+                <div className="flex items-center gap-4">
+                  <span className="grid h-12 w-12 shrink-0 place-items-center rounded-lg bg-primary/10 text-primary">
+                    <FileText className="h-6 w-6" />
+                  </span>
+
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-medium">{file.name}</p>
+                    <p className="mt-0.5 text-xs text-muted-foreground">
+                      {formatSize(file.size)} · PDF
+                    </p>
+                  </div>
+
+                  {!loading && (
+                    <>
+                      <label
+                        htmlFor="pdf-file"
+                        className="cursor-pointer rounded-md px-3 py-1.5 text-sm font-medium text-primary hover:bg-primary/10 focus-within:ring-2 focus-within:ring-primary/40"
+                      >
+                        Change
+                      </label>
+
+                      <button
+                        type="button"
+                        onClick={removeFile}
+                        className="rounded-md p-2 text-muted-foreground hover:bg-secondary hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+                        aria-label="Remove selected file"
+                      >
+                        <X size={18} />
+                      </button>
+                    </>
+                  )}
+                </div>
+
+                {loading && (
+                  <div className="mt-4" aria-live="polite">
+                    <div
+                      className="h-1.5 overflow-hidden rounded-full bg-border"
+                      role="progressbar"
+                      aria-valuemin={0}
+                      aria-valuemax={100}
+                      aria-valuenow={progress}
+                    >
+                      <div
+                        className="h-full rounded-full bg-primary transition-[width] duration-200 ease-out"
+                        style={{ width: `${progress}%` }}
+                      />
+                    </div>
+
+                    <p className="mt-2 text-xs text-muted-foreground">
+                      {progress < 100
+                        ? `Uploading… ${progress}%`
+                        : "Upload complete. Checking your file…"}
+                    </p>
+                  </div>
+                )}
+              </div>
+            )}
 
             <input
+              ref={fileInputRef}
               id="pdf-file"
               type="file"
               accept=".pdf,application/pdf"
@@ -379,240 +547,275 @@ function Upload() {
               onChange={handleFileChange}
               disabled={loading}
             />
+          </section>
 
-            {file && (
-              <div className="mt-3 flex items-center gap-3 rounded-md border border-border p-3">
-                <FileText className="h-7 w-7 shrink-0 text-primary" />
+          {/* Details */}
+          <section className="grid gap-5 p-6 sm:p-8">
+            <div>
+              <h2 className="text-lg font-semibold">Details</h2>
+              <p className="mt-1 text-sm text-muted-foreground">
+                A clear title helps other students find your upload.
+              </p>
+            </div>
 
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-medium">
-                    {file.name}
-                  </p>
+            <div>
+              <div className="flex items-baseline justify-between">
+                <label htmlFor="title" className="label-sm">
+                  Title
+                </label>
+                <span className="text-xs tabular-nums text-muted-foreground">
+                  {title.length}/200
+                </span>
+              </div>
 
-                  <p className="text-xs text-muted-foreground">
-                    {(file.size / (1024 * 1024)).toFixed(2)} MB
-                  </p>
-                </div>
+              <input
+                id="title"
+                name="title"
+                className="field w-full"
+                placeholder="e.g. Data Structures - Chapter 1 Notes"
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                maxLength={200}
+                required
+                disabled={loading}
+              />
+            </div>
 
-                <button
-                  type="button"
-                  onClick={removeFile}
-                  disabled={loading}
-                  className="rounded-md p-2 text-muted-foreground hover:bg-secondary hover:text-foreground"
-                  aria-label="Remove selected file"
-                >
-                  <X size={18} />
-                </button>
+            <fieldset disabled={loading}>
+              <legend className="label-sm">Type</legend>
+
+              <div className="mt-1.5 grid gap-3 sm:grid-cols-2">
+                {TYPES.map((t) => (
+                  <label key={t.value} className="relative block cursor-pointer">
+                    <input
+                      type="radio"
+                      name="type"
+                      value={t.value}
+                      checked={type === t.value}
+                      onChange={() => setType(t.value)}
+                      className="peer sr-only"
+                    />
+
+                    <span className="block rounded-xl border border-border p-4 transition-colors hover:bg-secondary/60 peer-checked:border-primary peer-checked:bg-primary/5 peer-focus-visible:ring-2 peer-focus-visible:ring-primary/40">
+                      <span className="flex items-center justify-between">
+                        <span className="text-sm font-medium">{t.label}</span>
+                        {type === t.value ? (
+                          <CheckCircle2 className="h-4 w-4 text-primary" />
+                        ) : (
+                          <Circle className="h-4 w-4 text-border" />
+                        )}
+                      </span>
+                      <span className="mt-1 block text-xs leading-relaxed text-muted-foreground">
+                        {t.hint}
+                      </span>
+                    </span>
+                  </label>
+                ))}
+              </div>
+            </fieldset>
+
+            <div>
+              <div className="flex items-baseline justify-between">
+                <label htmlFor="description" className="label-sm">
+                  Description <span className="font-normal text-muted-foreground">(optional)</span>
+                </label>
+                <span className="text-xs tabular-nums text-muted-foreground">
+                  {description.length}/2000
+                </span>
+              </div>
+
+              <textarea
+                id="description"
+                name="description"
+                className="field w-full"
+                rows={4}
+                placeholder="What does this PDF cover? Mention chapters, topics, or the exam it's for."
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                maxLength={2000}
+                disabled={loading}
+              />
+            </div>
+          </section>
+
+          {/* Class */}
+          <section className="grid gap-5 p-6 sm:grid-cols-2 sm:p-8">
+            <div className="sm:col-span-2">
+              <h2 className="text-lg font-semibold">Your class</h2>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Used to show your upload to the right students and teachers.
+              </p>
+            </div>
+
+            <div className="sm:col-span-2">
+              <label htmlFor="course" className="label-sm">
+                Course
+              </label>
+
+              <select
+                id="course"
+                name="course_id"
+                className="field w-full"
+                value={courseId}
+                onChange={(e) => setCourseId(e.target.value)}
+                required
+                disabled={coursesLoading || coursesError !== "" || loading}
+              >
+                <option value="">
+                  {coursesLoading ? "Loading courses..." : "Select a course"}
+                </option>
+
+                {courses.map((course) => (
+                  <option key={course.id} value={course.id}>
+                    {course.code} — {course.title}
+                  </option>
+                ))}
+              </select>
+
+              {coursesError && (
+                <p className="mt-2 text-xs text-red-500" role="alert">
+                  {coursesError}
+                </p>
+              )}
+            </div>
+
+            <div>
+              <label htmlFor="intake" className="label-sm">
+                Intake
+              </label>
+
+              <input
+                id="intake"
+                name="intake"
+                type="text"
+                inputMode="numeric"
+                className="field w-full"
+                placeholder="e.g. 49"
+                value={intake}
+                onChange={(e) => setIntake(e.target.value)}
+                required
+                disabled={loading}
+              />
+            </div>
+
+            <div>
+              <label htmlFor="section" className="label-sm">
+                Section
+              </label>
+
+              <input
+                id="section"
+                name="section"
+                type="text"
+                className="field w-full"
+                placeholder="e.g. 3"
+                value={section}
+                onChange={(e) => setSection(e.target.value)}
+                required
+                disabled={loading}
+              />
+            </div>
+          </section>
+
+          {/* Actions */}
+          <section className="grid gap-4 p-6 sm:p-8">
+            {error && (
+              <div
+                className="flex items-start gap-2 rounded-lg border border-red-500/30 bg-red-500/5 p-3 text-sm text-red-500"
+                role="alert"
+              >
+                <AlertCircle size={18} className="mt-0.5 shrink-0" />
+                <span>{error}</span>
               </div>
             )}
-          </div>
 
-          {/* Title */}
-          <div className="sm:col-span-2">
-            <label htmlFor="title" className="label-sm">
-              Title
-            </label>
-
-            <input
-              id="title"
-              name="title"
-              className="field w-full"
-              placeholder="e.g. Data Structures - Chapter 1 Notes"
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              maxLength={200}
-              required
-              disabled={loading}
-            />
-          </div>
-
-          {/* Course */}
-          <div>
-            <label htmlFor="course" className="label-sm">
-              Course
-            </label>
-
-            <select
-              id="course"
-              name="course_id"
-              className="field w-full"
-              value={courseId}
-              onChange={(e) => setCourseId(e.target.value)}
-              required
-              disabled={coursesLoading || coursesError !== "" || loading}
+            <button
+              type="submit"
+              disabled={
+                loading || coursesLoading || courses.length === 0 || !ready
+              }
+              className="btn-primary inline-flex w-full items-center justify-center gap-2 py-3 disabled:cursor-not-allowed disabled:opacity-50"
             >
-              <option value="">
-                {coursesLoading
-                  ? "Loading courses..."
-                  : "Select a course"}
-              </option>
+              {loading ? (
+                <>
+                  <LoaderCircle size={18} className="animate-spin motion-reduce:animate-none" />
+                  {progress < 100 ? "Uploading…" : "Checking file…"}
+                </>
+              ) : (
+                <>
+                  <UploadCloud size={18} />
+                  Submit for review
+                </>
+              )}
+            </button>
 
-              {courses.map((course) => (
-                <option key={course.id} value={course.id}>
-                  {course.code} — {course.title}
-                </option>
-              ))}
-            </select>
-
-            {coursesError && (
-              <p className="mt-2 text-xs text-red-500">
-                {coursesError}
-              </p>
-            )}
-          </div>
-
-          {/* Type */}
-          <div>
-            <label htmlFor="type" className="label-sm">
-              Type
-            </label>
-
-            <select
-              id="type"
-              name="type"
-              className="field w-full"
-              value={type}
-              onChange={(e) => setType(e.target.value)}
-              disabled={loading}
-            >
-              <option value="note">Note</option>
-              <option value="suggestion">Suggestion</option>
-            </select>
-          </div>
-
-          {/* Intake */}
-          <div>
-            <label htmlFor="intake" className="label-sm">
-              Intake
-            </label>
-
-            <input
-              id="intake"
-              name="intake"
-              type="text"
-              className="field w-full"
-              placeholder="e.g. 49"
-              value={intake}
-              onChange={(e) => setIntake(e.target.value)}
-              required
-              disabled={loading}
-            />
-          </div>
-
-          {/* Section */}
-          <div>
-            <label htmlFor="section" className="label-sm">
-              Section
-            </label>
-
-            <input
-              id="section"
-              name="section"
-              type="text"
-              className="field w-full"
-              placeholder="e.g. 3"
-              value={section}
-              onChange={(e) => setSection(e.target.value)}
-              required
-              disabled={loading}
-            />
-          </div>
-
-          {/* Description */}
-          <div className="sm:col-span-2">
-            <label htmlFor="description" className="label-sm">
-              Description (optional)
-            </label>
-
-            <textarea
-              id="description"
-              name="description"
-              className="field w-full"
-              rows={4}
-              placeholder="Add a short description about your PDF..."
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              maxLength={2000}
-              disabled={loading}
-            />
-          </div>
-
-          {/* Error message */}
-          {error && (
-            <div
-              className="flex items-start gap-2 rounded-md border border-red-500/30 bg-red-500/5 p-3 text-sm text-red-500 sm:col-span-2"
-              role="alert"
-            >
-              <AlertCircle size={18} className="mt-0.5 shrink-0" />
-              <span>{error}</span>
-            </div>
-          )}
-
-          {/* Submit button */}
-          <button
-            type="submit"
-            disabled={
-              loading ||
-              coursesLoading ||
-              courses.length === 0 ||
-              !file
-            }
-            className="btn-primary inline-flex items-center justify-center gap-2 sm:col-span-2 disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            {loading ? (
-              <>
-                <LoaderCircle size={18} className="animate-spin" />
-                Uploading...
-              </>
-            ) : (
-              <>
-                <UploadCloud size={18} />
-                Submit for review
-              </>
-            )}
-          </button>
+            <p className="text-center text-xs text-muted-foreground" aria-live="polite">
+              {ready || loading
+                ? "Your PDF stays private until a course teacher approves it."
+                : `Still needed: ${missing
+                    .map((m) => m.label.toLowerCase())
+                    .join(", ")}.`}
+            </p>
+          </section>
         </div>
 
-        {/* Automatic checks */}
-        <aside className="paper-card h-fit p-5">
-          <h3 className="text-base font-semibold">
-            Automatic checks
-          </h3>
+        {/* Side panel */}
+        <aside className="grid gap-6 lg:sticky lg:top-24">
+          <div className="paper-card p-5">
+            <h3 className="text-base font-semibold">Ready to submit</h3>
 
-          <ul className="mt-4 space-y-3 text-sm">
-            {checks.map((check, index) => {
-              const completed =
-                index === 0
-                  ? fileValid
-                  : index === 1
-                    ? fileValid && file!.size <= MAX_FILE_SIZE
-                    : index === 2
-                      ? fileValid
-                      : false;
+            <ul className="mt-4 space-y-3 text-sm">
+              {requirements.map((r) => (
+                <li key={r.label} className="flex items-center gap-2.5">
+                  {r.met ? (
+                    <CheckCircle2 className="h-4 w-4 shrink-0 text-success" />
+                  ) : (
+                    <Circle className="h-4 w-4 shrink-0 text-border" />
+                  )}
 
-              return (
-                <li key={check} className="flex gap-2">
-                  <CheckCircle2
-                    className={`mt-0.5 h-4 w-4 shrink-0 ${
-                      completed
-                        ? "text-success"
-                        : "text-muted-foreground"
-                    }`}
-                  />
-
-                  <span className="text-muted-foreground">
-                    {check}
+                  <span
+                    className={
+                      r.met ? "text-foreground" : "text-muted-foreground"
+                    }
+                  >
+                    {r.label}
                   </span>
                 </li>
-              );
-            })}
-          </ul>
+              ))}
+            </ul>
+          </div>
 
-          <div className="mt-5 border-t border-border pt-4">
-            <p className="text-xs leading-relaxed text-muted-foreground">
-              Your PDF will remain pending until a course teacher
-              reviews and approves it.
-            </p>
+          <div className="paper-card p-5">
+            <h3 className="text-base font-semibold">What happens next</h3>
+
+            <ol className="mt-4">
+              {reviewSteps.map((step, i) => {
+                const Icon = step.icon;
+                const last = i === reviewSteps.length - 1;
+
+                return (
+                  <li key={step.title} className="relative flex gap-3 pb-5 last:pb-0">
+                    {!last && (
+                      <span
+                        className="absolute left-4 top-9 -ml-px h-[calc(100%-2rem)] w-px bg-border"
+                        aria-hidden="true"
+                      />
+                    )}
+
+                    <span className="relative grid h-8 w-8 shrink-0 place-items-center rounded-full bg-primary/10 text-primary">
+                      <Icon className="h-4 w-4" />
+                    </span>
+
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium">{step.title}</p>
+                      <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">
+                        {step.text}
+                      </p>
+                    </div>
+                  </li>
+                );
+              })}
+            </ol>
           </div>
         </aside>
       </form>

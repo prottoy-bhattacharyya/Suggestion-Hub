@@ -4,6 +4,17 @@ import axios from "axios";
 
 import { NoteCard, type Note } from "@/components/PdfCard";
 import api from "@/lib/api";
+import {
+  ArrowDownWideNarrow,
+  ArrowUpWideNarrow,
+  Check,
+  FileText,
+  Layers,
+  Lock,
+  SlidersHorizontal,
+  Sparkles,
+  X,
+} from "lucide-react";
 
 export const Route = createFileRoute("/feeds")({
   head: () => ({
@@ -260,7 +271,21 @@ function Feed() {
     selectedIntakes.length +
     selectedSections.length;
 
-  // Reusable checkbox filter group
+  const greeting = (() => {
+    const h = new Date().getHours();
+    if (h < 12) return "Good morning";
+    if (h < 18) return "Good afternoon";
+    return "Good evening";
+  })();
+
+  const activeChips: { label: string; remove: () => void }[] = [
+    ...selectedCourses.map((v) => ({ label: v, remove: () => toggleFilter(v, selectedCourses, setSelectedCourses) })),
+    ...selectedTypes.map((v) => ({ label: v, remove: () => toggleFilter(v, selectedTypes, setSelectedTypes) })),
+    ...selectedIntakes.map((v) => ({ label: `Intake ${v}`, remove: () => toggleFilter(v, selectedIntakes, setSelectedIntakes) })),
+    ...selectedSections.map((v) => ({ label: `Section ${v}`, remove: () => toggleFilter(v, selectedSections, setSelectedSections) })),
+  ];
+
+  // Reusable pill-style filter group
   const FilterGroup = ({
     title,
     options,
@@ -272,41 +297,52 @@ function Feed() {
     selected: string[];
     setSelected: React.Dispatch<React.SetStateAction<string[]>>;
   }) => (
-    <div className="border-b border-border py-4 last:border-0">
-      <h3 className="mb-3 text-sm font-semibold">{title}</h3>
+    <section className="border-t border-border/60 pt-5">
+      <div className="mb-3 flex items-center justify-between">
+        <h3 className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+          {title}
+        </h3>
+        {selected.length > 0 && (
+          <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-semibold text-primary">
+            {selected.length}
+          </span>
+        )}
+      </div>
 
       {options.length === 0 ? (
-        <p className="text-xs text-muted-foreground">
-          No options available
-        </p>
+        <p className="text-xs italic text-muted-foreground/70">No options yet</p>
       ) : (
-        <div className="max-h-40 space-y-2 overflow-y-auto">
-          {options.map((option) => (
-            <label
-              key={option}
-              className="flex cursor-pointer items-center gap-2 text-sm"
-            >
-              <input
-                type="checkbox"
-                checked={selected.includes(option)}
-                onChange={() =>
-                  toggleFilter(option, selected, setSelected)
-                }
-                className="h-4 w-4 accent-primary"
-              />
-              <span>{option}</span>
-            </label>
-          ))}
+        <div className="flex max-h-40 flex-wrap gap-1.5 overflow-y-auto pr-1">
+          {options.map((option) => {
+            const active = selected.includes(option);
+            return (
+              <button
+                key={option}
+                type="button"
+                aria-pressed={active}
+                onClick={() => toggleFilter(option, selected, setSelected)}
+                className={`inline-flex items-center gap-1 rounded-full border px-3 py-1 text-xs font-medium transition-all duration-200 ${
+                  active
+                    ? "border-primary bg-primary text-primary-foreground shadow-sm"
+                    : "border-border bg-background/60 text-foreground/80 hover:border-primary/40 hover:text-foreground"
+                }`}
+              >
+                {active && <Check className="h-3 w-3" />}
+                {option}
+              </button>
+            );
+          })}
         </div>
       )}
-    </div>
+    </section>
   );
 
   if (authStatus === "checking") {
     return (
-      <div className="flex min-h-[60vh] items-center justify-center px-4">
-        <p className="text-sm text-muted-foreground">
-          Checking your login...
+      <div className="flex min-h-[60vh] flex-col items-center justify-center gap-4 px-4">
+        <div className="h-10 w-10 animate-spin rounded-full border-2 border-primary/20 border-t-primary" />
+        <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
+          Verifying session
         </p>
       </div>
     );
@@ -315,20 +351,20 @@ function Feed() {
   if (authStatus === "unauthenticated") {
     return (
       <div className="flex min-h-[70vh] items-center justify-center px-4">
-        <div className="paper-card w-full max-w-sm space-y-4 p-8 text-center">
-          <h1 className="text-2xl font-semibold">
-            Please log in first
-          </h1>
-
-          <p className="text-sm text-muted-foreground">
-            You need to be logged in to access your Suggestion Hub feed.
+        <div className="relative w-full max-w-md overflow-hidden rounded-3xl border border-border/60 bg-card p-10 text-center shadow-2xl shadow-primary/5">
+          <div className="pointer-events-none absolute -top-24 left-1/2 h-48 w-48 -translate-x-1/2 rounded-full bg-primary/15 blur-3xl" />
+          <div className="relative mx-auto mb-6 flex h-14 w-14 items-center justify-center rounded-2xl border border-primary/20 bg-primary/10 text-primary">
+            <Lock className="h-6 w-6" />
+          </div>
+          <h1 className="relative text-3xl font-semibold tracking-tight">Members only</h1>
+          <p className="relative mt-3 text-sm leading-relaxed text-muted-foreground">
+            Sign in to unlock curated notes and suggestions from your university community.
           </p>
-
           <Link
             to="/login"
-            className="btn-primary block w-full text-center"
+            className="btn-primary relative mt-8 block w-full rounded-xl py-3 text-center font-medium shadow-lg shadow-primary/20 transition-transform hover:-translate-y-0.5"
           >
-            Go to Login
+            Continue to login
           </Link>
         </div>
       </div>
@@ -337,164 +373,206 @@ function Feed() {
 
   if (!currentUser) return null;
 
+  const firstName = currentUser.full_name.split(" ")[0];
+
   return (
-    <div className="mx-auto max-w-7xl px-4 py-10">
-      <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-[minmax(0,1fr)_260px]">
-
-        {/* Main feed */}
-        <main className="min-w-0">
-          <div className="flex flex-wrap items-center justify-between gap-4">
-            <div>
-              <h1 className="text-3xl">
-                Good day, {currentUser.full_name.split(" ")[0]}
-              </h1>
-
-              <p className="mt-1 text-sm text-muted-foreground">
-                Notes and suggestions shared by your university community.
-              </p>
-            </div>
-
-            <button
-              type="button"
-              onClick={clearFilters}
-              className="btn-ghost text-sm"
-            >
-              Clear filters
-            </button>
+    <div className="mx-auto max-w-7xl px-4 py-10 sm:px-6 lg:py-14">
+      {/* Hero header */}
+      <header className="relative mb-10 overflow-hidden rounded-3xl border border-border/60 bg-card px-6 py-8 sm:px-10 sm:py-10">
+        <div className="pointer-events-none absolute -right-20 -top-20 h-64 w-64 rounded-full bg-primary/10 blur-3xl" />
+        <div className="relative flex flex-wrap items-end justify-between gap-6">
+          <div>
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-primary/20 bg-primary/5 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-primary">
+              <Sparkles className="h-3 w-3" /> Your feed
+            </span>
+            <h1 className="mt-4 text-4xl font-semibold tracking-tight sm:text-5xl">
+              {greeting}, <span className="text-primary">{firstName}</span>
+            </h1>
+            <p className="mt-3 max-w-lg text-sm leading-relaxed text-muted-foreground sm:text-base">
+              Hand-picked notes and suggestions, shared by your university community.
+            </p>
           </div>
 
+          <dl className="flex gap-8">
+            <div>
+              <dt className="text-[11px] uppercase tracking-[0.14em] text-muted-foreground">Notes</dt>
+              <dd className="mt-1 text-3xl font-semibold tabular-nums">{notes.length}</dd>
+            </div>
+            <div>
+              <dt className="text-[11px] uppercase tracking-[0.14em] text-muted-foreground">Courses</dt>
+              <dd className="mt-1 text-3xl font-semibold tabular-nums">{courses.length}</dd>
+            </div>
+          </dl>
+        </div>
+      </header>
+
+      <div className="grid grid-cols-1 items-start gap-8 lg:grid-cols-[minmax(0,1fr)_300px]">
+        {/* Main feed */}
+        <main className="min-w-0">
           {error && (
             <div
-              className="mt-4 rounded-md border border-red-500/30 bg-red-500/5 p-3 text-sm text-red-500"
+              className="mb-6 rounded-2xl border border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive"
               role="alert"
             >
               {error}
             </div>
           )}
 
-          <div className="mt-6 mb-4 flex flex-wrap items-center justify-between gap-2">
+          {/* Toolbar */}
+          <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
+            <p className="text-sm text-muted-foreground">
+              Showing <span className="font-semibold text-foreground">{Math.min(shown, filteredNotes.length)}</span> of{" "}
+              <span className="font-semibold text-foreground">{filteredNotes.length}</span>
+            </p>
             <button
               type="button"
               onClick={() => setShowFilters((previous) => !previous)}
-              className="btn-ghost text-sm lg:hidden"
+              className="inline-flex items-center gap-2 rounded-full border border-border px-4 py-2 text-sm font-medium transition-colors hover:bg-muted lg:hidden"
             >
-              Filters ({activeFilterCount})
+              <SlidersHorizontal className="h-4 w-4" />
+              Filters
+              {activeFilterCount > 0 && (
+                <span className="rounded-full bg-primary px-1.5 text-[10px] font-semibold text-primary-foreground">
+                  {activeFilterCount}
+                </span>
+              )}
             </button>
           </div>
 
+          {activeChips.length > 0 && (
+            <div className="mb-5 flex flex-wrap items-center gap-2">
+              {activeChips.map((chip) => (
+                <button
+                  key={chip.label}
+                  type="button"
+                  onClick={chip.remove}
+                  className="group inline-flex items-center gap-1.5 rounded-full bg-primary/10 px-3 py-1 text-xs font-medium text-primary transition-colors hover:bg-primary/15"
+                >
+                  {chip.label}
+                  <X className="h-3 w-3 opacity-60 group-hover:opacity-100" />
+                </button>
+              ))}
+              <button
+                type="button"
+                onClick={clearFilters}
+                className="text-xs font-medium text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
+              >
+                Clear all
+              </button>
+            </div>
+          )}
+
           <div className="space-y-4">
             {notesLoading ? (
-              <p className="py-10 text-center text-muted-foreground">
-                Loading notes...
-              </p>
+              Array.from({ length: 3 }).map((_, i) => (
+                <div key={i} className="animate-pulse rounded-2xl border border-border/60 bg-card p-6">
+                  <div className="h-4 w-1/3 rounded bg-muted" />
+                  <div className="mt-4 h-3 w-2/3 rounded bg-muted" />
+                  <div className="mt-2 h-3 w-1/2 rounded bg-muted" />
+                </div>
+              ))
             ) : (
               <>
-                {filteredNotes.slice(0, shown).map((note) => (
-                  <div key={note.id} className="space-y-2">
+                {filteredNotes.slice(0, shown).map((note, i) => (
+                  <div
+                    key={note.id}
+                    className="animate-in fade-in slide-in-from-bottom-2 fill-mode-both transition-transform duration-300 hover:-translate-y-0.5"
+                    style={{ animationDelay: `${(i % 4) * 60}ms` }}
+                  >
                     <NoteCard note={note} />
                   </div>
                 ))}
 
                 {!filteredNotes.length && (
-                  <p className="py-10 text-center text-muted-foreground">
-                    No notes match these filters.
-                  </p>
+                  <div className="flex flex-col items-center rounded-3xl border border-dashed border-border py-16 text-center">
+                    <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-muted text-muted-foreground">
+                      <FileText className="h-5 w-5" />
+                    </div>
+                    <p className="font-medium">Nothing here yet</p>
+                    <p className="mt-1 text-sm text-muted-foreground">
+                      Try loosening your filters to discover more notes.
+                    </p>
+                    {activeFilterCount > 0 && (
+                      <button
+                        type="button"
+                        onClick={clearFilters}
+                        className="mt-5 rounded-full border border-border px-4 py-2 text-sm font-medium hover:bg-muted"
+                      >
+                        Reset filters
+                      </button>
+                    )}
+                  </div>
                 )}
               </>
             )}
           </div>
 
           {!notesLoading && shown < filteredNotes.length && (
-            <button
-              type="button"
-              onClick={() => setShown((previous) => previous + 4)}
-              className="btn-ghost mt-6 w-full"
-            >
-              Load more
-            </button>
+            <div className="mt-8 flex justify-center">
+              <button
+                type="button"
+                onClick={() => setShown((previous) => previous + 4)}
+                className="inline-flex items-center gap-2 rounded-full border border-border bg-card px-6 py-2.5 text-sm font-medium shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md"
+              >
+                <Layers className="h-4 w-4" />
+                Load more · {filteredNotes.length - shown} left
+              </button>
+            </div>
           )}
         </main>
 
         {/* Right-side filters */}
         <aside
-          className={`paper-card p-4 ${
-            showFilters ? "block" : "hidden"
-          } lg:sticky lg:top-24 lg:block`}
+          className={`${showFilters ? "block" : "hidden"} space-y-5 rounded-3xl border border-border/60 bg-card/80 p-6 shadow-xl shadow-primary/5 backdrop-blur lg:sticky lg:top-24 lg:block`}
         >
-          <div className="mb-2 flex items-center justify-between">
-            <h2 className="font-semibold">Filters</h2>
-
-            <button
-              type="button"
-              onClick={clearFilters}
-              className="text-xs text-primary hover:underline"
-            >
-              Clear all
-            </button>
+          <div className="flex items-center justify-between">
+            <h2 className="flex items-center gap-2 text-base font-semibold tracking-tight">
+              <SlidersHorizontal className="h-4 w-4 text-primary" />
+              Refine
+            </h2>
+            {activeFilterCount > 0 && (
+              <button
+                type="button"
+                onClick={clearFilters}
+                className="text-xs font-medium text-primary hover:underline"
+              >
+                Reset
+              </button>
+            )}
           </div>
 
-          {/* Upload sorting */}
-          <div className="border-b border-border py-4">
-            <h3 className="mb-3 text-sm font-semibold">
+          {/* Sort segmented control */}
+          <section>
+            <h3 className="mb-3 text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
               Upload date
             </h3>
-
-            <div className="space-y-2">
-              <label className="flex cursor-pointer items-center gap-2 text-sm">
-                <input
-                  type="radio"
-                  name="sortOrder"
-                  checked={sortOrder === "newest"}
-                  onChange={() => setSortOrder("newest")}
-                  className="h-4 w-4 accent-primary"
-                />
-                Newest uploads
-              </label>
-
-              <label className="flex cursor-pointer items-center gap-2 text-sm">
-                <input
-                  type="radio"
-                  name="sortOrder"
-                  checked={sortOrder === "oldest"}
-                  onChange={() => setSortOrder("oldest")}
-                  className="h-4 w-4 accent-primary"
-                />
-                Oldest uploads
-              </label>
+            <div className="grid grid-cols-2 gap-1 rounded-xl bg-muted p-1">
+              {([
+                { value: "newest", label: "Newest", Icon: ArrowDownWideNarrow },
+                { value: "oldest", label: "Oldest", Icon: ArrowUpWideNarrow },
+              ] as const).map(({ value, label, Icon }) => (
+                <button
+                  key={value}
+                  type="button"
+                  aria-pressed={sortOrder === value}
+                  onClick={() => setSortOrder(value)}
+                  className={`inline-flex items-center justify-center gap-1.5 rounded-lg py-2 text-xs font-medium transition-all ${
+                    sortOrder === value
+                      ? "bg-background text-foreground shadow-sm"
+                      : "text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  <Icon className="h-3.5 w-3.5" />
+                  {label}
+                </button>
+              ))}
             </div>
-          </div>
+          </section>
 
-          <FilterGroup
-            title="Course"
-            options={courses}
-            selected={selectedCourses}
-            setSelected={setSelectedCourses}
-          />
-
-          <FilterGroup
-            title="Type"
-            options={types}
-            selected={selectedTypes}
-            setSelected={setSelectedTypes}
-          />
-
-          <FilterGroup
-            title="Intake"
-            options={intakes}
-            selected={selectedIntakes}
-            setSelected={setSelectedIntakes}
-          />
-
-          <FilterGroup
-            title="Section"
-            options={sections}
-            selected={selectedSections}
-            setSelected={setSelectedSections}
-          />
-
-          <p className="mt-3 text-xs text-muted-foreground">
-            {activeFilterCount} filter option(s) selected
-          </p>
+          <FilterGroup title="Course" options={courses} selected={selectedCourses} setSelected={setSelectedCourses} />
+          <FilterGroup title="Type" options={types} selected={selectedTypes} setSelected={setSelectedTypes} />
+          <FilterGroup title="Intake" options={intakes} selected={selectedIntakes} setSelected={setSelectedIntakes} />
+          <FilterGroup title="Section" options={sections} selected={selectedSections} setSelected={setSelectedSections} />
         </aside>
       </div>
     </div>

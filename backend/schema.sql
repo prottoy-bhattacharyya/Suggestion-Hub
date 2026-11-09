@@ -146,7 +146,7 @@ CREATE TABLE IF NOT EXISTS reviews (
   id          INT UNSIGNED NOT NULL AUTO_INCREMENT,
   note_id     INT UNSIGNED NOT NULL,
   teacher_id  INT UNSIGNED NOT NULL,
-  decision    ENUM('approved','rejected') NOT NULL,
+  decision    ENUM('pending','approved','rejected') NOT NULL,
   comment     TEXT         NULL,                     -- reason shown to the student
   created_at  DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (id),

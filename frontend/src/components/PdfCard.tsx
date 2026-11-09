@@ -7,6 +7,7 @@ export type Note = {
   title: string;
   description: string;
   type: "note" | "suggestion";
+  course_code: string;
   intake: string;
   section: string;
   rating_avg: string;
@@ -125,6 +126,13 @@ export function NoteCard({ note }: { note: Note }) {
 
         <div className="min-w-0 flex-1">
           <div className="mb-2 flex flex-wrap items-center gap-2">
+            {/* Course code */}
+            {note.course_code && (
+              <span className="chip bg-accent">
+                {note.course_code}
+              </span>
+            )}
+
             <span
               className={`chip ${
                 note.type === "note"

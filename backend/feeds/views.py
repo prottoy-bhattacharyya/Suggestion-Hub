@@ -22,13 +22,13 @@ def feeds(request):
                 SELECT
                     n.id, n.title, COALESCE(n.description, ''), n.type,
                     n.intake, COALESCE(n.section, ''), n.rating_avg, n.rating_count,
-                    n.created_at, n.review_status, n.uploader_id, u.full_name
+                    n.created_at, n.review_status, n.uploader_id, c.code AS course_code, u.full_name
                 FROM notes n
                 LEFT JOIN users u ON n.uploader_id = u.id
-                WHERE n.review_status = 'approved' OR n.uploader_id = %s
+                LEFT JOIN courses c ON n.course_id = c.id
+                WHERE n.review_status = 'approved'
                 ORDER BY n.created_at DESC
                 """,
-                (viewer_id,),
             )
             rows = cursor.fetchall()
 
@@ -45,7 +45,8 @@ def feeds(request):
                     "created_at": row[8].isoformat() if row[8] else None,
                     "review_status": row[9],
                     "uploader_id": row[10],
-                    "uploader_name": row[11],
+                    "course_code": row[11],
+                    "uploader_name": row[12],
                     "file_url": request.build_absolute_uri(f"/notes/{row[0]}/file/"),
                 }
                 for row in rows

@@ -1,18 +1,21 @@
+import os
+
 import mysql.connector
 
-def get_db_connection():
-    db_config = {
-        "host": "localhost",
-        "port": 3306,
-        "user": "root",
-        "password": "1234",
-        "database": "suggestion_hub",
-    }
+from django.conf import settings
 
+
+def get_db_connection():
+    """Raw connection for the hand-written app views.
+
+    Reads the same DB_* environment overrides as core/settings.py so the
+    backend works identically on the host (defaults) and inside Docker
+    (DB_HOST=db).
+    """
     return mysql.connector.connect(
-        host=db_config.get("host", "localhost"),
-        port=int(db_config.get("port", 3306)),
-        user=db_config.get("user", "root"),
-        password=db_config.get("password", ""),
-        database=db_config.get("database", "suggestion_hub"),
+        host=os.environ.get("DB_HOST", "localhost"),
+        port=int(os.environ.get("DB_PORT", "3306")),
+        user=os.environ.get("DB_USER", "root"),
+        password=os.environ.get("DB_PASSWORD", "1234"),
+        database=os.environ.get("DB_NAME", "suggestion_hub"),
     )

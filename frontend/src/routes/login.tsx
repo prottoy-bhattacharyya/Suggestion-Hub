@@ -10,6 +10,8 @@ import {
   GraduationCap,
   Search,
   MessageSquareText,
+  Sparkles,
+  ArrowRight,
 } from "lucide-react";
 import { getCSRFToken } from "@/lib/utils";
 import api from "@/lib/api";
@@ -190,60 +192,73 @@ function Login() {
 
   const busy = loading || checkingSession;
 
+  const labelCls =
+    "mb-2 block text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground";
+  const fieldCls =
+    "w-full rounded-xl border border-border bg-background px-4 py-3 text-sm outline-none transition-all placeholder:text-muted-foreground/60 focus:border-primary/50 focus:ring-4 focus:ring-primary/10 disabled:opacity-60";
+
   return (
     <div className="mx-auto grid min-h-[calc(100vh-4rem)] max-w-6xl lg:grid-cols-[1fr_minmax(0,28rem)] lg:gap-16 lg:px-8">
       {/* Intro panel (desktop only) */}
-      <section className="hidden flex-col justify-center py-16 lg:flex">
-        <h2 className="max-w-md text-4xl font-semibold leading-tight tracking-tight">
-          Notes your teachers have already checked.
-        </h2>
+      <section className="relative hidden flex-col justify-center overflow-hidden py-16 lg:flex">
+        <div className="pointer-events-none absolute -left-24 top-1/3 h-72 w-72 rounded-full bg-primary/10 blur-3xl" />
+        <div className="relative">
+          <span className="inline-flex items-center gap-1.5 rounded-full border border-primary/20 bg-primary/5 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-primary">
+            <Sparkles className="h-3 w-3" /> Suggestion Hub
+          </span>
 
-        <p className="mt-4 max-w-md leading-relaxed text-muted-foreground">
-          Suggestion Hub brings your course’s notes and exam suggestions into
-          one place, so you spend less time hunting and more time studying.
-        </p>
+          <h2 className="mt-6 max-w-md text-4xl font-semibold leading-tight tracking-tight sm:text-5xl">
+            Notes your teachers have <span className="text-primary">already checked</span>.
+          </h2>
 
-        <ul className="mt-10 max-w-md space-y-6">
-          {highlights.map(({ icon: Icon, title, text }) => (
-            <li key={title} className="flex gap-4">
-              <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-primary/10 text-primary">
-                <Icon className="h-5 w-5" aria-hidden="true" />
-              </span>
+          <p className="mt-4 max-w-md leading-relaxed text-muted-foreground">
+            Suggestion Hub brings your course’s notes and exam suggestions into
+            one place, so you spend less time hunting and more time studying.
+          </p>
 
-              <div>
-                <p className="font-medium">{title}</p>
-                <p className="mt-0.5 text-sm leading-relaxed text-muted-foreground">
-                  {text}
-                </p>
-              </div>
-            </li>
-          ))}
-        </ul>
+          <ul className="mt-10 max-w-md space-y-6">
+            {highlights.map(({ icon: Icon, title, text }) => (
+              <li key={title} className="flex gap-4">
+                <span className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-primary/10 text-primary">
+                  <Icon className="h-5 w-5" aria-hidden="true" />
+                </span>
+                <div>
+                  <p className="font-semibold tracking-tight">{title}</p>
+                  <p className="mt-0.5 text-sm leading-relaxed text-muted-foreground">
+                    {text}
+                  </p>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </div>
       </section>
 
       {/* Form */}
       <section className="flex flex-col justify-center px-4 py-16 sm:px-8 lg:px-0">
-        <div className="paper-card mx-auto w-full max-w-md p-7 sm:p-9">
-          <h1 className="text-3xl font-semibold tracking-tight">
+        <div className="relative mx-auto w-full max-w-md overflow-hidden rounded-3xl border border-border/60 bg-card p-7 shadow-2xl shadow-primary/5 sm:p-9">
+          <div className="pointer-events-none absolute -right-20 -top-20 h-44 w-44 rounded-full bg-primary/15 blur-3xl" />
+
+          <h1 className="relative text-3xl font-semibold tracking-tight">
             {forgot ? "Reset your password" : "Welcome back"}
           </h1>
 
-          <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
+          <p className="relative mt-2 text-sm leading-relaxed text-muted-foreground">
             {forgot
               ? "Enter your university email and we’ll send you a reset link."
               : "Log in with your university email."}
           </p>
 
-          <form className="mt-8 space-y-5" onSubmit={handleLogin} noValidate={false}>
+          <form className="relative mt-8 space-y-5" onSubmit={handleLogin} noValidate={false}>
             <div>
-              <label htmlFor="email" className="label-sm">
+              <label htmlFor="email" className={labelCls}>
                 University email
               </label>
 
               <input
                 id="email"
                 name="email"
-                className="field w-full"
+                className={fieldCls}
                 type="email"
                 placeholder="you@university.edu"
                 autoComplete="email"
@@ -256,7 +271,7 @@ function Login() {
             {!forgot && (
               <div>
                 <div className="flex items-baseline justify-between">
-                  <label htmlFor="password" className="label-sm">
+                  <label htmlFor="password" className={labelCls}>
                     Password
                   </label>
 
@@ -274,7 +289,7 @@ function Login() {
                   <input
                     id="password"
                     name="password"
-                    className="field w-full pr-12"
+                    className={`${fieldCls} pr-12`}
                     type={showPassword ? "text" : "password"}
                     autoComplete="current-password"
                     placeholder="Enter your password"
@@ -285,7 +300,7 @@ function Login() {
                   <button
                     type="button"
                     onClick={() => setShowPassword((previous) => !previous)}
-                    className="absolute inset-y-0 right-0 flex items-center justify-center rounded-r-md px-3 text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+                    className="absolute inset-y-0 right-0 flex items-center justify-center rounded-r-xl px-3 text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
                     aria-label={showPassword ? "Hide password" : "Show password"}
                     aria-pressed={showPassword}
                     title={showPassword ? "Hide password" : "Show password"}
@@ -302,7 +317,7 @@ function Login() {
 
             {error && (
               <div
-                className="flex items-start gap-2 rounded-lg border border-red-500/30 bg-red-500/5 p-3 text-sm text-red-500"
+                className="animate-in fade-in flex items-start gap-2 rounded-2xl border border-destructive/30 bg-destructive/5 p-3.5 text-sm text-destructive"
                 role="alert"
               >
                 <AlertCircle size={18} className="mt-0.5 shrink-0" aria-hidden="true" />
@@ -312,7 +327,7 @@ function Login() {
 
             {success && (
               <div
-                className="flex items-start gap-2 rounded-lg border border-green-500/30 bg-green-500/5 p-3 text-sm text-green-600"
+                className="animate-in fade-in flex items-start gap-2 rounded-2xl border border-success/30 bg-success/5 p-3.5 text-sm text-success"
                 role="status"
               >
                 <CheckCircle2 size={18} className="mt-0.5 shrink-0" aria-hidden="true" />
@@ -323,14 +338,16 @@ function Login() {
             <button
               type="submit"
               disabled={busy}
-              className="btn-primary inline-flex w-full items-center justify-center gap-2 py-3 disabled:cursor-not-allowed disabled:opacity-50"
+              className="inline-flex w-full items-center justify-center gap-2 rounded-full bg-primary px-6 py-3.5 text-sm font-semibold text-primary-foreground shadow-lg shadow-primary/25 transition-all hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:translate-y-0"
             >
-              {busy && (
+              {busy ? (
                 <LoaderCircle
                   size={18}
                   className="animate-spin motion-reduce:animate-none"
                   aria-hidden="true"
                 />
+              ) : (
+                <ArrowRight size={18} aria-hidden="true" />
               )}
 
               {loading
@@ -346,7 +363,7 @@ function Login() {
               <button
                 type="button"
                 onClick={toggleForgot}
-                className="w-full rounded text-center text-sm text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+                className="w-full rounded py-1 text-center text-sm text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
               >
                 Back to log in
               </button>

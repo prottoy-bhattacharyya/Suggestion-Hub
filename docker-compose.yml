@@ -1,0 +1,79 @@
+# Suggestion Hub — dev compose: frontend + backend + database
+# Up:     docker compose up --build
+# Down:   docker compose down            (keep DB data)
+# Purge:  docker compose down -v         (wipe DB volume too)
+#
+# The db service initializes suggestion_hub from backend/schema.sql on the
+# FIRST boot only (mysql official images run /docker-entrypoint-initdb.d once
+# when the volume is empty). Later boots keep your data. `down -v` resets.
+#
+# Host container MySQL is published on 127.0.0.1:3307 because your native
+# MySQL already uses 3306.
+
+services:
+  db:
+    image: mysql:8.4
+    container_name: sh_db
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: "1234"
+      MYSQL_DATABASE: suggestion_hub
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+    ports:
+      - "127.0.0.1:3307:3306"   # host keeps 3306 free for your native MySQL
+    volumes:
+      - db-data:/var/lib/mysql
+      - ./backend/schema.sql:/docker-entrypoint-initdb.d/schema.sql:ro
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "--silent"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+      start_period: 60s
+
+  backend:
+    build: ./backend
+    container_name: sh_backend
+    restart: unless-stopped
+    environment:
+      DB_HOST: db
+      DB_PORT: "3306"
+      DB_NAME: suggestion_hub
+      DB_USER: root
+      DB_PASSWORD: "1234"
+      DJANGO_SUPERUSER_USERNAME: admin
+      DJANGO_SUPERUSER_EMAIL: prottoybhattacharya@gmail.com
+      DJANGO_SUPERUSER_PASSWORD: admin   # demo only password
+    command: >
+      sh -c "uv run --frozen python manage.py migrate --noinput &&
+             uv run python manage.py createsuperuser --noinput || true;
+             exec uv run --frozen python manage.py runserver 0.0.0.0:8000"
+    ports:
+      - "8000:8000"
+    volumes:
+      # code sync: edits on the host appear immediately in the container
+      - ./backend:/app
+      # keep the container's .venv from being hidden by that bind mount
+      - backend-venv:/app/.venv
+    depends_on:
+      db:
+        condition: service_healthy
+
+  frontend:
+    build: ./frontend
+    container_name: sh_frontend
+    restart: unless-stopped
+    ports:
+      - "8081:8081"
+    volumes:
+      - ./frontend:/app
+      - frontend-node_modules:/app/node_modules
+    depends_on:
+      - backend
+
+volumes:
+  db-data:
+  backend-venv:
+  frontend-node_modules:

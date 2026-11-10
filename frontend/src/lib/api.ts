@@ -3,7 +3,7 @@ import axios from "axios";
 const api = axios.create({
   baseURL:
     (import.meta.env["VITE_API_URL"] as string | undefined) ??
-    "http://localhost:8000",
+    "http://192.168.1.138:8000",
   withCredentials: true,
   
 });

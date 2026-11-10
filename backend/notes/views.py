@@ -111,6 +111,13 @@ def note_file(request, note_id):
 
 def get_notes(request):
     user_id = request.GET.get('user_id')
+    if not user_id:
+        return JsonResponse({'status': 'error', 'error': 'user_id parameter is required'}, status=400)
+
+    logged_in_user = request.session.get('user')
+    if not logged_in_user:
+        return JsonResponse({'status': 'error', 'error': 'You need to login first.'}, status=401)
+    logged_in_user_id = logged_in_user.get('id')
     
 
     conn = get_db_connection()
@@ -118,16 +125,23 @@ def get_notes(request):
     try:
         cursor.execute(
             """
-            select n.id, n.title, n.description, n.type, n.intake, n.section,
-                    n.rating_avg, n.rating_count, n.created_at, n.review_status,
-                    u.full_name as uploader_name
+            select 
+                n.id, n.title, n.description, n.type, n.intake, n.section,
+                n.rating_avg, n.rating_count, n.created_at, n.review_status,
+                u.full_name as uploader_name, r.comment as review_comment
             from notes n
             left join users u on n.uploader_id = u.id
+            left join reviews r on n.id = r.note_id
             where u.id = %s
             """,
             (user_id,),
         )
         notes = cursor.fetchall()
+
+        if logged_in_user_id != int(user_id):
+            # Filter out notes that are not approved for other users
+            notes = [note for note in notes if note[9] == 'approved']
+        
         response_data = {
             'status': 'success',
             'notes': [
@@ -143,6 +157,7 @@ def get_notes(request):
                     'created_at': note[8].isoformat() if note[8] else None,
                     'review_status': note[9],
                     'uploader_name': note[10],
+                    'review_comment': note[11],
                     'file_url': request.build_absolute_uri(
                         f"/notes/{note[0]}/file/"
                     ),

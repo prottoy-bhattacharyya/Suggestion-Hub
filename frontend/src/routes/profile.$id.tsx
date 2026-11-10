@@ -66,7 +66,7 @@ type Note = {
   created_at: string;
   review_status: "pending" | "approved" | "rejected";
   rejection_reason?: string | null;
-  review_reason?: string | null;
+  review_comment?: string | null;
   uploader_name: string;
   file_url?: string | null;
 };
@@ -589,7 +589,7 @@ function NoteCard({
     rejected: { cls: "bg-destructive/15 text-destructive", label: "Rejected", Icon: XCircle },
   }[note.review_status];
 
-  const rejectionReason = note.rejection_reason || note.review_reason;
+  const rejectionReason = note.review_comment || note.review_reason;
 
   return (
     <article className="group rounded-2xl border border-border/60 bg-card p-5 transition-all duration-300 hover:-translate-y-0.5 hover:border-primary/30 hover:shadow-lg hover:shadow-primary/5 sm:p-6">

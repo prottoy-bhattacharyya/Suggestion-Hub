@@ -9,13 +9,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 WORKDIR /app
 
 # uv to resolve/install the project exactly as on the host
-RUN pip install --no-cache-dir uv
+RUN pip install --no-cache-dir uv==0.12.0
 
 # 1) lockfile + project metadata only -> dependency layer is cached
 COPY pyproject.toml uv.lock ./
 # 2) container venv lives in a named volume (see compose) so the host bind
 #    mount can't mask it; first boot re-syncs into that empty volume
-RUN uv sync --frozen
+
+RUN uv sync --frozen --no-install-project
 
 # 3) code — bind-mounted in dev, but keep a copy for clean image runs
 COPY . .

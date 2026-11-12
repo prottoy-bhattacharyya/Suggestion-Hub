@@ -53,6 +53,7 @@ type FeedNote = Note & {
   created_at: string;
   uploader_name: string;
   file_url: string;
+  file_type?: "pdf" | "video";
 };
 
 type NotesResponse = {

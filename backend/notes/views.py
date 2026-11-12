@@ -1,12 +1,19 @@
 import json
 import os
+import re
 
 from django.conf import settings
-from django.http import FileResponse, JsonResponse
+from django.http import FileResponse, HttpResponse, JsonResponse
 from django.views.decorators.clickjacking import xframe_options_exempt
 
 from .utils import getFileHash, save_file
 from core.utils import get_db_connection
+
+MAX_PDF_BYTES = 20 * 1024 * 1024
+MAX_VIDEO_BYTES = 500 * 1024 * 1024
+PDF_EXTENSIONS = {".pdf"}
+VIDEO_EXTENSIONS = {".mp4", ".webm", ".mov"}
+VIDEO_CONTENT_TYPES = {".mp4": "video/mp4", ".webm": "video/webm", ".mov": "video/quicktime"}
 
 # Create your views here.
 def upload_note(request):
@@ -32,6 +39,33 @@ def upload_note(request):
     if not file:
         return JsonResponse({'status': 'error', 'error': 'No file provided'}, status=400)
 
+    media_type = (request.POST.get('media_type') or '').lower()
+
+    ext = os.path.splitext(file.name)[1].lower()
+    if ext in PDF_EXTENSIONS:
+        file_type = 'pdf'
+    elif ext in VIDEO_EXTENSIONS:
+        file_type = 'video'
+    else:
+        return JsonResponse(
+            {'status': 'error', 'error': 'Unsupported file type. Upload a PDF, MP4, WebM or MOV file.'},
+            status=400,
+        )
+
+    if media_type and media_type != file_type:
+        return JsonResponse(
+            {'status': 'error', 'error': 'File does not match the selected upload kind.'},
+            status=400,
+        )
+
+    max_bytes = MAX_PDF_BYTES if file_type == 'pdf' else MAX_VIDEO_BYTES
+    if file.size > max_bytes:
+        limit_mb = max_bytes // (1024 * 1024)
+        return JsonResponse(
+            {'status': 'error', 'error': f'File too large. Maximum size is {limit_mb} MB.'},
+            status=400,
+        )
+
     file_path = os.path.join("uploaded_notes", file.name)
     file_hash = getFileHash(file)
 
@@ -53,10 +87,10 @@ def upload_note(request):
             with conn.cursor() as insert_cursor:
                 insert_cursor.execute(
                     """
-                    INSERT INTO notes (uploader_id, course_id, title, description, type, intake, section, file, file_hash)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    INSERT INTO notes (uploader_id, course_id, title, description, type, intake, section, file, file_type, file_hash)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                     """,
-                    (uploader_id, course_id, title, description, type, intake, section, file_path, file_hash)
+                    (uploader_id, course_id, title, description, type, intake, section, file_path, file_type, file_hash)
                 )
 
             conn.commit()
@@ -77,7 +111,7 @@ def note_file(request, note_id):
     try:
         with conn.cursor() as cursor:
             cursor.execute(
-                "SELECT file, title, review_status, uploader_id FROM notes WHERE id = %s",
+                "SELECT file, file_type, title, review_status, uploader_id FROM notes WHERE id = %s",
                 (note_id,)
             )
             row = cursor.fetchone()
@@ -87,7 +121,7 @@ def note_file(request, note_id):
     if row is None:
         return JsonResponse({'status': 'error', 'error': 'Note not found'}, status=404)
 
-    file, title, review_status, uploader_id = row
+    file, file_type, title, review_status, uploader_id = row
 
     session_user = request.session.get('user')
 
@@ -98,12 +132,59 @@ def note_file(request, note_id):
                 {'status': 'error', 'error': 'You cannot view this note yet.'},
                 status=403,
             )
-
     path = os.path.normpath(os.path.join(settings.BASE_DIR, file))
+    print(f"Path: {path}")
+    # normalize slashes for Windows and Linux, and check if the path is within the BASE_DIR and is a file
+    path = path.replace("\\", "/")
+    print(f"Normalized Path: {path}")
     if not path.startswith(os.path.normpath(settings.BASE_DIR)) or not os.path.isfile(path):
         return JsonResponse({'status': 'error', 'error': 'File missing'}, status=404)
 
-    response = FileResponse(open(path, 'rb'), content_type='application/pdf')
+    if file_type == 'pdf':
+        content_type = 'application/pdf'
+    else:
+        ext = os.path.splitext(path)[1].lower()
+        content_type = VIDEO_CONTENT_TYPES.get(ext, 'video/mp4')
+
+    file_size = os.path.getsize(path)
+
+    range_header = request.META.get('HTTP_RANGE')
+    if range_header:
+        match = re.match(r'bytes=(\d*)-(\d*)$', range_header.strip())
+        if match:
+            raw_start, raw_end = match.groups()
+            if raw_start == '' and raw_end == '':
+                start, end = 0, file_size - 1
+            elif raw_start == '':
+                start = max(0, file_size - int(raw_end))
+                end = file_size - 1
+            else:
+                start = int(raw_start)
+                end = min(int(raw_end) if raw_end else file_size - 1, file_size - 1)
+
+            if start >= file_size or start > end:
+                error_response = JsonResponse(
+                    {'status': 'error', 'error': 'Requested range not satisfiable'},
+                    status=416,
+                )
+                error_response['Content-Range'] = f'bytes */{file_size}'
+                return error_response
+
+            length = min(end - start + 1, 8 * 1024 * 1024)
+            end = start + length - 1
+
+            with open(path, 'rb') as f:
+                f.seek(start)
+                data = f.read(length)
+
+            response = HttpResponse(data, status=206, content_type=content_type)
+            response['Content-Range'] = f'bytes {start}-{end}/{file_size}'
+            response['Accept-Ranges'] = 'bytes'
+            response['Content-Disposition'] = f'inline; filename="{os.path.basename(path)}"'
+            return response
+
+    response = FileResponse(open(path, 'rb'), content_type=content_type)
+    response['Accept-Ranges'] = 'bytes'
     response['Content-Disposition'] = f'inline; filename="{os.path.basename(path)}"'
     return response
     
@@ -128,7 +209,8 @@ def get_notes(request):
             select 
                 n.id, n.title, n.description, n.type, n.intake, n.section,
                 n.rating_avg, n.rating_count, n.created_at, n.review_status,
-                u.full_name as uploader_name, r.comment as review_comment
+                u.full_name as uploader_name, r.comment as review_comment,
+                n.file_type
             from notes n
             left join users u on n.uploader_id = u.id
             left join reviews r on n.id = r.note_id
@@ -158,6 +240,7 @@ def get_notes(request):
                     'review_status': note[9],
                     'uploader_name': note[10],
                     'review_comment': note[11],
+                    'file_type': note[12],
                     'file_url': request.build_absolute_uri(
                         f"/notes/{note[0]}/file/"
                     ),
@@ -199,7 +282,7 @@ def note_detail(request, note_id):
             SELECT n.id, n.title, n.description, n.type, n.intake, n.section,
                    n.rating_avg, n.rating_count, n.created_at, n.review_status,
                    n.uploader_id, u.full_name AS uploader_name,
-                   c.code AS course_code
+                   c.code AS course_code, n.file_type
             FROM notes n
             LEFT JOIN users u ON n.uploader_id = u.id
             LEFT JOIN courses c ON n.course_id = c.id
@@ -218,7 +301,7 @@ def note_detail(request, note_id):
     (
         id_, title, description, type_, intake, section,
         rating_avg, rating_count, created_at, review_status,
-        uploader_id, uploader_name, course_code,
+        uploader_id, uploader_name, course_code, file_type,
     ) = row
 
     # Pending notes are only visible to their uploader, teachers and admins.
@@ -267,6 +350,7 @@ def note_detail(request, note_id):
                 'course_code': course_code,
                 'is_owner': session_user.get('id') == uploader_id,
                 'my_rating': my_rating,
+                'file_type': file_type,
                 'file_url': request.build_absolute_uri(f"/notes/{id_}/file/"),
             },
         },

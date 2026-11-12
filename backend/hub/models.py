@@ -64,6 +64,7 @@ class Note(models.Model):
     type = models.CharField(max_length=10, choices=[("note","note"),("suggestion","suggestion")])
     intake = models.CharField(max_length=10)
     section = models.CharField(max_length=10, null=True)
+    file_type = models.CharField(max_length=10, choices=[("pdf","pdf"),("video","video")])
     file = models.CharField(max_length=255)
     file_hash = models.CharField(max_length=64)
     page_count = models.PositiveIntegerField(null=True, blank=True)

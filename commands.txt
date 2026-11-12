@@ -1,0 +1,24 @@
+# Frontend
+npm i
+npm run dev
+
+# backend
+uv run manage.py makemigrations
+uv run manage.py migrate
+uv run manage.py runserver 0.0.0.0:8000
+
+# With Docker
+docker compose up --build
+docker compose up
+
+# If Docker compose shows error
+Copy-Item "C:\Program Files\Docker\Docker\resources\cli-plugins\docker-compose.exe" `
+"$env:USERPROFILE\.docker\cli-plugins\docker-compose.exe"
+
+# Create Backup of DB
+mysqldump -h 127.0.0.1 -P 3306 -u root -p --single-transaction --default-character-set=utf8mb4 --result-file=backup.sql suggestion_hub
+
+# Restore in docker
+docker exec -i sh_db sh -c "mkdir backup"
+docker cp backup.sql sh_db:/backup/backup.sql
+docker exec -i sh_db sh -c 'mysql -uroot -p1234 --default-character-set=utf8mb4 suggestion_hub < /backup/backup.sql'

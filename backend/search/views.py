@@ -79,7 +79,7 @@ def search_keywords(request):
                 """
                 SELECT n.id, n.title, n.description, n.type, n.intake, n.section,
                     c.code AS course_code, n.rating_avg, n.rating_count, n.approved_at, 
-                    u.id AS uploader_id, u.full_name AS author_name
+                    u.id AS uploader_id, u.full_name AS author_name, n.file_type
                 FROM notes n
                 JOIN courses c ON c.id = n.course_id
                 JOIN users u ON u.id = n.uploader_id
@@ -112,6 +112,7 @@ def search_keywords(request):
                     "approved_at": note[9].isoformat() if note[9] else None,
                     "author_id": note[10],
                     "author_name": note[11],
+                    "file_type": note[12],
                     'file_url': request.build_absolute_uri(
                         f"/notes/{note[0]}/file/")
 

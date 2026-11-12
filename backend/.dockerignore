@@ -2,10 +2,7 @@
 __pycache__
 *.pyc
 *.pyo
-uploaded_notes/*.pdf
-uploaded_notes/*.docx
-uploaded_notes/*.ppt
-uploaded_notes/*.html
+uploaded_notes/
 pytest_cache
 db.sqlite3
 Dockerfile

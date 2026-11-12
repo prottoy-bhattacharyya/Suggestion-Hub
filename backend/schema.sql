@@ -116,6 +116,7 @@ CREATE TABLE IF NOT EXISTS notes (
   intake            VARCHAR(10)  NOT NULL,
   section           VARCHAR(10)  NULL,
   file              VARCHAR(255) NOT NULL,           -- path from Django storage
+  file_type         ENUM('pdf','video') NOT NULL DEFAULT 'pdf', -- pdf or video upload
   file_hash         CHAR(64)     NOT NULL,           -- SHA-256, blocks duplicates
   page_count        INT UNSIGNED NULL,
   ocr_used          TINYINT(1)   NOT NULL DEFAULT 0, -- set during preprocessing

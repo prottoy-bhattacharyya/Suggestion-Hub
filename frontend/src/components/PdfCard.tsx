@@ -1,5 +1,5 @@
 import { Link } from "@tanstack/react-router";
-import { FileText, Star, Download, ExternalLink } from "lucide-react";
+import { FileText, Play, Star, Download, ExternalLink } from "lucide-react";
 import { userById, type Status, type Pdf } from "@/lib/mock-data";
 
 export type Note = {
@@ -15,6 +15,7 @@ export type Note = {
   created_at: string;
   uploader_name: string;
   file_url?: string | null;
+  file_type?: "pdf" | "video";
 };
 
 export function Stars({ value }: { value: number }) {
@@ -121,7 +122,11 @@ export function NoteCard({ note }: { note: Note }) {
     <article className="paper-card group p-5">
       <div className="flex items-start gap-4">
         <div className="grid h-12 w-10 shrink-0 place-items-center rounded-sm bg-primary text-primary-foreground">
-          <FileText className="h-5 w-5" />
+          {note.file_type === "video" ? (
+            <Play className="h-5 w-5" />
+          ) : (
+            <FileText className="h-5 w-5" />
+          )}
         </div>
 
         <div className="min-w-0 flex-1">
@@ -184,7 +189,7 @@ export function NoteCard({ note }: { note: Note }) {
                 className="btn-primary inline-flex items-center gap-2"
               >
                 <ExternalLink size={16} />
-                View PDF
+                {note.file_type === "video" ? "View video" : "View PDF"}
               </Link>
 
               {note.file_url && (

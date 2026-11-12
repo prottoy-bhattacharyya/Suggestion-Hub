@@ -72,6 +72,7 @@ type SearchNote = {
   author_name: string;
   author_id: number;
   file_url: string;
+  file_type?: "pdf" | "video";
 };
 
 type KeywordSearchResponse = {

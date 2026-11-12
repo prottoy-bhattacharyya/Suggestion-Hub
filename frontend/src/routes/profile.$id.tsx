@@ -6,9 +6,6 @@
 } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import {
-  FileText,
-  Star,
-  ExternalLink,
   LoaderCircle,
   CheckCircle2,
   Clock,
@@ -21,9 +18,13 @@ import {
   Briefcase,
   UserPlus,
   UserCheck,
-  CalendarDays,
   Inbox,
 } from "lucide-react";
+
+import {
+  NoteCard,
+  type Note as PdfCardNote,
+} from "@/components/PdfCard";
 
 import api from "@/lib/api";
 import { getSessionUser } from "@/lib/auth";
@@ -54,26 +55,17 @@ type FollowStatusResponse = {
   is_following: boolean;
 };
 
-type Note = {
-  id: number;
-  title: string;
-  description: string;
-  type: "note" | "suggestion";
-  intake: string;
-  section: string;
-  rating_avg: string;
-  rating_count: number;
-  created_at: string;
+type ProfileNote = PdfCardNote & {
+  course_code?: string;
   review_status: "pending" | "approved" | "rejected";
   rejection_reason?: string | null;
   review_comment?: string | null;
-  uploader_name: string;
-  file_url?: string | null;
+  review_reason?: string | null;
 };
 
 type NotesResponse = {
   status: string;
-  notes: Note[];
+  notes: ProfileNote[];
 };
 
 export const Route = createFileRoute("/profile/$id")({
@@ -135,10 +127,13 @@ function Profile() {
   const [followChecking, setFollowChecking] = useState(!isMe);
   const [followError, setFollowError] = useState("");
 
-  const [notes, setNotes] = useState<Note[]>([]);
+  const [notes, setNotes] = useState<ProfileNote[]>([]);
   const [notesLoading, setNotesLoading] = useState(true);
   const [notesError, setNotesError] = useState("");
-  const [tab, setTab] = useState<"approved" | "pending" | "rejected">("approved");
+
+  const [tab, setTab] = useState<
+    "approved" | "pending" | "rejected"
+  >("approved");
 
   // Fetch notes belonging to this profile.
   useEffect(() => {
@@ -177,7 +172,9 @@ function Profile() {
         console.error("Notes loading failed:", error);
 
         if (!cancelled) {
-          setNotesError("Unable to load uploads. Please try again.");
+          setNotesError(
+            "Unable to load uploads. Please try again.",
+          );
         }
       } finally {
         if (!cancelled) {
@@ -239,7 +236,9 @@ function Profile() {
         console.error("Could not check follow status:", error);
 
         if (!cancelled) {
-          setFollowError("Could not load follow status. Please try again.");
+          setFollowError(
+            "Could not load follow status. Please try again.",
+          );
         }
       } finally {
         if (!cancelled) {
@@ -266,6 +265,7 @@ function Profile() {
     try {
       const csrfToken = await getCSRFToken();
       api.defaults.headers.post["X-CSRFToken"] = csrfToken;
+
       const { data } = await api.post<FollowStatusResponse>(
         `/social/follow/${user.id}/`,
         {},
@@ -283,11 +283,15 @@ function Profile() {
           );
         }
       } else {
-        setFollowError("Unable to update follow status. Please try again.");
+        setFollowError(
+          "Unable to update follow status. Please try again.",
+        );
       }
     } catch (error) {
       console.error("Follow request failed:", error);
-      setFollowError("Unable to update follow status. Please try again.");
+      setFollowError(
+        "Unable to update follow status. Please try again.",
+      );
     } finally {
       setFollowLoading(false);
     }
@@ -307,20 +311,55 @@ function Profile() {
   const details = (
     isTeacher
       ? [
-          { icon: Briefcase, label: "Designation", value: user.designation },
-          { icon: Hash, label: "Employee ID", value: user.employee_id },
+          {
+            icon: Briefcase,
+            label: "Designation",
+            value: user.designation,
+          },
+          {
+            icon: Hash,
+            label: "Employee ID",
+            value: user.employee_id,
+          },
         ]
       : [
-          { icon: Hash, label: "Student ID", value: user.student_id },
-          { icon: GraduationCap, label: "Intake", value: user.intake },
-          { icon: BookOpen, label: "Section", value: user.section },
+          {
+            icon: Hash,
+            label: "Student ID",
+            value: user.student_id,
+          },
+          {
+            icon: GraduationCap,
+            label: "Intake",
+            value: user.intake,
+          },
+          {
+            icon: BookOpen,
+            label: "Section",
+            value: user.section,
+          },
         ]
-  ).filter((d) => d.value);
+  ).filter((detail) => detail.value);
 
   const tabs = [
-    { key: "approved" as const, label: "Approved", count: approvedNotes.length, Icon: CheckCircle2 },
-    { key: "pending" as const, label: "Pending", count: pendingNotes.length, Icon: Clock },
-    { key: "rejected" as const, label: "Rejected", count: rejectedNotes.length, Icon: XCircle },
+    {
+      key: "approved" as const,
+      label: "Approved",
+      count: approvedNotes.length,
+      Icon: CheckCircle2,
+    },
+    {
+      key: "pending" as const,
+      label: "Pending",
+      count: pendingNotes.length,
+      Icon: Clock,
+    },
+    {
+      key: "rejected" as const,
+      label: "Rejected",
+      count: rejectedNotes.length,
+      Icon: XCircle,
+    },
   ];
 
   const sectionProps = {
@@ -338,7 +377,8 @@ function Profile() {
     },
     rejected: {
       title: "Not approved",
-      description: "Check the reason on each note before re-uploading.",
+      description:
+        "Check the reason on each note before re-uploading.",
       notes: rejectedNotes,
       emptyMessage: "No rejected notes — nice work.",
     },
@@ -350,7 +390,8 @@ function Profile() {
         to="/feeds"
         className="mb-6 inline-flex items-center gap-1.5 text-sm text-muted-foreground transition-colors hover:text-foreground"
       >
-        <ArrowLeft className="h-4 w-4" /> Back to feed
+        <ArrowLeft className="h-4 w-4" />
+        Back to feed
       </Link>
 
       {/* Profile hero */}
@@ -384,6 +425,7 @@ function Profile() {
                 ) : (
                   <UserPlus className="h-4 w-4" />
                 )}
+
                 {followChecking
                   ? "Checking"
                   : followLoading
@@ -400,13 +442,20 @@ function Profile() {
               <h1 className="text-3xl font-semibold tracking-tight sm:text-4xl">
                 {user.full_name}
               </h1>
-              {isTeacher && <BadgeCheck className="h-6 w-6 text-primary" />}
+
+              {isTeacher && (
+                <BadgeCheck className="h-6 w-6 text-primary" />
+              )}
             </div>
+
             <div className="mt-2 flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
               <span className="rounded-full border border-primary/20 bg-primary/5 px-3 py-0.5 text-[11px] font-semibold uppercase tracking-[0.14em] text-primary">
                 {isTeacher ? "Faculty" : "Student"}
               </span>
-              {user.department_name && <span>{user.department_name}</span>}
+
+              {user.department_name && (
+                <span>{user.department_name}</span>
+              )}
             </div>
           </div>
 
@@ -420,9 +469,14 @@ function Profile() {
                   <div className="grid h-9 w-9 place-items-center rounded-xl bg-primary/10 text-primary">
                     <Icon className="h-4 w-4" />
                   </div>
+
                   <div className="min-w-0">
-                    <dt className="text-[10px] uppercase tracking-[0.14em] text-muted-foreground">{label}</dt>
-                    <dd className="truncate text-sm font-medium">{value}</dd>
+                    <dt className="text-[10px] uppercase tracking-[0.14em] text-muted-foreground">
+                      {label}
+                    </dt>
+                    <dd className="truncate text-sm font-medium">
+                      {value}
+                    </dd>
                   </div>
                 </div>
               ))}
@@ -448,10 +502,17 @@ function Profile() {
               { label: "Uploads", value: totalUploads },
               { label: "Followers", value: followersCount },
               { label: "Following", value: profile.following },
-            ].map((s) => (
-              <div key={s.label} className="px-4 py-4 text-center">
-                <p className="font-display text-2xl font-semibold tabular-nums sm:text-3xl">{s.value}</p>
-                <p className="mt-1 text-[11px] uppercase tracking-[0.14em] text-muted-foreground">{s.label}</p>
+            ].map((stat) => (
+              <div
+                key={stat.label}
+                className="px-4 py-4 text-center"
+              >
+                <p className="font-display text-2xl font-semibold tabular-nums sm:text-3xl">
+                  {stat.value}
+                </p>
+                <p className="mt-1 text-[11px] uppercase tracking-[0.14em] text-muted-foreground">
+                  {stat.label}
+                </p>
               </div>
             ))}
           </div>
@@ -459,7 +520,10 @@ function Profile() {
       </section>
 
       {followError && !isMe && (
-        <p className="mt-4 rounded-2xl border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive" role="alert">
+        <p
+          className="mt-4 rounded-2xl border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive"
+          role="alert"
+        >
           {followError}
         </p>
       )}
@@ -472,7 +536,7 @@ function Profile() {
           </h2>
 
           {isMe && !notesLoading && !notesError && (
-            <div className="inline-flex gap-1 rounded-full bg-muted p-1">
+            <div className="inline-flex flex-wrap gap-1 rounded-full bg-muted p-1">
               {tabs.map(({ key, label, count, Icon }) => (
                 <button
                   key={key}
@@ -487,7 +551,9 @@ function Profile() {
                 >
                   <Icon className="h-3.5 w-3.5" />
                   {label}
-                  <span className="tabular-nums opacity-60">{count}</span>
+                  <span className="tabular-nums opacity-60">
+                    {count}
+                  </span>
                 </button>
               ))}
             </div>
@@ -497,7 +563,10 @@ function Profile() {
         {notesLoading && (
           <div className="mt-6 space-y-3">
             {Array.from({ length: 3 }).map((_, i) => (
-              <div key={i} className="animate-pulse rounded-2xl border border-border/60 bg-card p-6">
+              <div
+                key={i}
+                className="animate-pulse rounded-2xl border border-border/60 bg-card p-6"
+              >
                 <div className="flex gap-4">
                   <div className="h-14 w-11 rounded-lg bg-muted" />
                   <div className="flex-1 space-y-2">
@@ -518,7 +587,10 @@ function Profile() {
         )}
 
         {!notesLoading && !notesError && (
-          <NotesSection {...sectionProps} showStatus={isMe} />
+          <NotesSection
+            {...sectionProps}
+            showStatus={isMe}
+          />
         )}
       </section>
     </div>
@@ -534,7 +606,7 @@ function NotesSection({
 }: {
   title: string;
   description: string;
-  notes: Note[];
+  notes: ProfileNote[];
   emptyMessage: string;
   showStatus: boolean;
 }) {
@@ -542,7 +614,9 @@ function NotesSection({
     <div className="mt-6">
       <div className="mb-4">
         <h3 className="text-sm font-semibold">{title}</h3>
-        <p className="text-sm text-muted-foreground">{description}</p>
+        <p className="text-sm text-muted-foreground">
+          {description}
+        </p>
       </div>
 
       {notes.length === 0 ? (
@@ -550,125 +624,83 @@ function NotesSection({
           <div className="mb-3 grid h-12 w-12 place-items-center rounded-2xl bg-muted text-muted-foreground">
             <Inbox className="h-5 w-5" />
           </div>
-          <p className="text-sm text-muted-foreground">{emptyMessage}</p>
+          <p className="text-sm text-muted-foreground">
+            {emptyMessage}
+          </p>
         </div>
       ) : (
-        <div className="space-y-3">
-          {notes.map((note, i) => (
-            <div
-              key={note.id}
-              className="animate-in fade-in slide-in-from-bottom-2 fill-mode-both"
-              style={{ animationDelay: `${Math.min(i, 6) * 50}ms` }}
-            >
-              <NoteCard note={note} showStatus={showStatus} />
-            </div>
-          ))}
+        <div className="space-y-4">
+          {notes.map((note, i) => {
+            const statusConfig = {
+              pending: {
+                label: "Pending review",
+                className: "bg-highlight/25 text-foreground",
+                Icon: Clock,
+              },
+              approved: {
+                label: "Approved",
+                className: "bg-success/15 text-success",
+                Icon: CheckCircle2,
+              },
+              rejected: {
+                label: "Rejected",
+                className: "bg-destructive/15 text-destructive",
+                Icon: XCircle,
+              },
+            }[note.review_status];
+
+            const rejectionReason =
+              note.review_comment ||
+              note.review_reason ||
+              note.rejection_reason;
+
+            // The shared PdfCard Note type requires course_code.
+            // Some profile API responses may not include it.
+            const cardNote: PdfCardNote = {
+              ...note,
+              course_code: note.course_code ?? "",
+            };
+
+            return (
+              <div
+                key={note.id}
+                className="animate-in fade-in slide-in-from-bottom-2 fill-mode-both"
+                style={{
+                  animationDelay: `${Math.min(i, 6) * 50}ms`,
+                }}
+              >
+                {showStatus && (
+                  <div className="mb-2 flex flex-wrap items-center gap-2">
+                    <span
+                      className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium ${statusConfig.className}`}
+                    >
+                      <statusConfig.Icon className="h-3.5 w-3.5" />
+                      {statusConfig.label}
+                    </span>
+                  </div>
+                )}
+
+                <NoteCard note={cardNote} />
+
+                {showStatus &&
+                  note.review_status === "rejected" && (
+                    <div className="mt-2 rounded-xl border border-destructive/30 bg-destructive/5 p-3">
+                      <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.12em] text-destructive">
+                        <XCircle className="h-3.5 w-3.5" />
+                        Rejection reason
+                      </div>
+
+                      <p className="mt-1 text-sm text-foreground">
+                        {rejectionReason ||
+                          "No rejection reason was provided by the administrator."}
+                      </p>
+                    </div>
+                  )}
+              </div>
+            );
+          })}
         </div>
       )}
     </div>
-  );
-}
-
-function NoteCard({
-  note,
-  showStatus,
-}: {
-  note: Note;
-  showStatus: boolean;
-}) {
-  const rating = Number(note.rating_avg);
-
-  const formattedDate = new Date(note.created_at).toLocaleDateString(
-    undefined,
-    { year: "numeric", month: "short", day: "numeric" },
-  );
-
-  const status = {
-    pending: { cls: "bg-highlight/25 text-foreground", label: "Pending review", Icon: Clock },
-    approved: { cls: "bg-success/15 text-success", label: "Approved", Icon: CheckCircle2 },
-    rejected: { cls: "bg-destructive/15 text-destructive", label: "Rejected", Icon: XCircle },
-  }[note.review_status];
-
-  const rejectionReason = note.review_comment || note.review_reason;
-
-  return (
-    <article className="group rounded-2xl border border-border/60 bg-card p-5 transition-all duration-300 hover:-translate-y-0.5 hover:border-primary/30 hover:shadow-lg hover:shadow-primary/5 sm:p-6">
-      <div className="flex items-start gap-4">
-        <div className="grid h-14 w-11 shrink-0 place-items-center rounded-lg bg-gradient-to-br from-primary to-primary/70 text-primary-foreground shadow-md shadow-primary/20">
-          <FileText className="h-5 w-5" />
-        </div>
-
-        <div className="min-w-0 flex-1">
-          <div className="mb-2 flex flex-wrap items-center gap-2">
-            <span className="rounded-full bg-primary/10 px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-primary">
-              {note.type}
-            </span>
-            <span className="text-xs text-muted-foreground">
-              Intake {note.intake} · Section {note.section}
-            </span>
-            {showStatus && (
-              <span className={`ml-auto inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[11px] font-medium ${status.cls}`}>
-                <status.Icon className="h-3 w-3" />
-                {status.label}
-              </span>
-            )}
-          </div>
-
-          <h4 className="font-display text-lg font-semibold leading-snug tracking-tight">
-            {note.title}
-          </h4>
-
-          {note.description && (
-            <p className="mt-1 line-clamp-2 text-sm leading-relaxed text-muted-foreground">
-              {note.description}
-            </p>
-          )}
-
-          {showStatus && note.review_status === "rejected" && (
-            <div className="mt-4 rounded-xl border border-destructive/30 bg-destructive/5 p-3">
-              <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.12em] text-destructive">
-                <XCircle className="h-3.5 w-3.5" />
-                Rejection reason
-              </div>
-              <p className="mt-1 text-sm text-foreground">
-                {rejectionReason || "No rejection reason was provided by the administrator."}
-              </p>
-            </div>
-          )}
-
-          <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-border/60 pt-4">
-            <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
-              <span>
-                By <span className="font-medium text-foreground">{note.uploader_name}</span>
-              </span>
-              <span className="inline-flex items-center gap-1">
-                <CalendarDays className="h-3.5 w-3.5" />
-                {formattedDate}
-              </span>
-              <span className="inline-flex items-center gap-1">
-                <Star className="h-3.5 w-3.5 fill-highlight text-highlight" />
-                <span className="font-medium text-foreground">
-                  {Number.isFinite(rating) ? rating.toFixed(1) : "0.0"}
-                </span>
-                <span>({note.rating_count})</span>
-              </span>
-            </div>
-
-            {note.file_url ? (
-              <Link
-                to="/pdf/$id"
-                params={{ id: String(note.id) }}
-                className="inline-flex items-center gap-1.5 rounded-full bg-primary px-4 py-2 text-xs font-medium text-primary-foreground shadow-md shadow-primary/20 transition-transform hover:-translate-y-0.5"
-              >
-                View PDF
-                <ExternalLink className="h-3.5 w-3.5" />
-              </Link>
-            ) : (
-              <p className="text-xs text-destructive">PDF link is missing.</p>
-            )}
-          </div>
-        </div>
-      </div>
-    </article>
   );
 }

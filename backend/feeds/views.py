@@ -22,7 +22,8 @@ def feeds(request):
                 SELECT
                     n.id, n.title, COALESCE(n.description, ''), n.type,
                     n.intake, COALESCE(n.section, ''), n.rating_avg, n.rating_count,
-                    n.created_at, n.review_status, n.uploader_id, c.code AS course_code, u.full_name
+                    n.created_at, n.review_status, n.uploader_id, c.code AS course_code, u.full_name,
+                    n.file_type
                 FROM notes n
                 LEFT JOIN users u ON n.uploader_id = u.id
                 LEFT JOIN courses c ON n.course_id = c.id
@@ -47,6 +48,7 @@ def feeds(request):
                     "uploader_id": row[10],
                     "course_code": row[11],
                     "uploader_name": row[12],
+                    "file_type": row[13],
                     "file_url": request.build_absolute_uri(f"/notes/{row[0]}/file/"),
                 }
                 for row in rows

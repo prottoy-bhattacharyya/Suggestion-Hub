@@ -5,6 +5,7 @@ import {
   Circle,
   UploadCloud,
   FileText,
+  Clapperboard,
   X,
   LoaderCircle,
   AlertCircle,
@@ -20,15 +21,15 @@ import { getCSRFToken } from "@/lib/utils";
 export const Route = createFileRoute("/upload")({
   head: () => ({
     meta: [
-      { title: "Upload a PDF — Suggestion Hub" },
+      { title: "Upload — Suggestion Hub" },
       {
         name: "description",
-        content: "Share a note or exam suggestion for teacher review.",
+        content: "Share a PDF note or a video lesson for teacher review.",
       },
-      { property: "og:title", content: "Upload a PDF — Suggestion Hub" },
+      { property: "og:title", content: "Upload — Suggestion Hub" },
       {
         property: "og:description",
-        content: "Submit notes for teacher review.",
+        content: "Submit notes or videos for teacher review.",
       },
     ],
   }),
@@ -42,7 +43,12 @@ type Course = {
   department_id: number;
 };
 
-const MAX_FILE_SIZE = 20 * 1024 * 1024; // 20 MB
+type MediaKind = "pdf" | "video";
+
+const MAX_PDF_SIZE = 20 * 1024 * 1024; // 20 MB
+const MAX_VIDEO_SIZE = 500 * 1024 * 1024; // 500 MB
+
+const VIDEO_EXTENSIONS = [".mp4", ".webm", ".mov"];
 
 const TYPES = [
   {
@@ -63,6 +69,7 @@ function formatSize(bytes: number) {
 }
 
 function Upload() {
+  const [mediaKind, setMediaKind] = useState<MediaKind>("pdf");
   const [file, setFile] = useState<File | null>(null);
   const [title, setTitle] = useState("");
   const [courseId, setCourseId] = useState("");
@@ -82,10 +89,14 @@ function Upload() {
 
   const [error, setError] = useState("");
   const [successMessage, setSuccessMessage] = useState(
-    "Your PDF has been submitted successfully.",
+    "Your upload has been submitted successfully.",
   );
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const isVideo = mediaKind === "video";
+  const maxSize = isVideo ? MAX_VIDEO_SIZE : MAX_PDF_SIZE;
+  const mediaLabel = isVideo ? "video" : "PDF";
 
   // Load courses from Django.
   useEffect(() => {
@@ -126,9 +137,7 @@ function Upload() {
               "Failed to load courses. Please refresh the page.",
           );
         } else {
-          setCoursesError(
-            err instanceof Error ? err.message : "Failed to load courses.",
-          );
+          setCoursesError(err instanceof Error ? err.message : "Failed to load courses.");
         }
       } finally {
         if (active) setCoursesLoading(false);
@@ -142,20 +151,40 @@ function Upload() {
     };
   }, []);
 
-  // Validate a PDF coming from the picker or from drag and drop.
+  // Switch between the PDF and video sections, clearing any picked file.
+  function switchMedia(kind: MediaKind) {
+    if (kind === mediaKind || loading) return;
+    setMediaKind(kind);
+    setFile(null);
+    setError("");
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  }
+
+  // Validate a file coming from the picker or from drag and drop.
   function acceptFile(selectedFile: File | null): boolean {
     setError("");
     setFile(null);
 
     if (!selectedFile) return false;
 
-    const isPdf =
-      selectedFile.type === "application/pdf" ||
-      selectedFile.name.toLowerCase().endsWith(".pdf");
+    const name = selectedFile.name.toLowerCase();
 
-    if (!isPdf) {
-      setError("Only PDF files are allowed.");
-      return false;
+    if (isVideo) {
+      const isVideoFile =
+        selectedFile.type.startsWith("video/") ||
+        VIDEO_EXTENSIONS.some((ext) => name.endsWith(ext));
+
+      if (!isVideoFile) {
+        setError("Only video files are allowed (MP4, WebM, MOV).");
+        return false;
+      }
+    } else {
+      const isPdf = selectedFile.type === "application/pdf" || name.endsWith(".pdf");
+
+      if (!isPdf) {
+        setError("Only PDF files are allowed.");
+        return false;
+      }
     }
 
     if (selectedFile.size === 0) {
@@ -163,8 +192,8 @@ function Upload() {
       return false;
     }
 
-    if (selectedFile.size > MAX_FILE_SIZE) {
-      setError("File size must be 20 MB or less.");
+    if (selectedFile.size > maxSize) {
+      setError(isVideo ? "Video size must be 500 MB or less." : "File size must be 20 MB or less.");
       return false;
     }
 
@@ -195,14 +224,14 @@ function Upload() {
     if (fileInputRef.current) fileInputRef.current.value = "";
   }
 
-  // Submit the PDF to Django.
+  // Submit the file to Django.
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
 
     setError("");
 
     if (!file) {
-      setError("Please select a PDF file.");
+      setError(`Please select a ${mediaLabel} file.`);
       return;
     }
 
@@ -231,6 +260,7 @@ function Upload() {
       const formData = new FormData();
 
       formData.append("file", file);
+      formData.append("media_type", mediaKind); // "pdf" or "video" — Django can branch on this
       formData.append("title", title.trim());
       formData.append("course_id", courseId);
       formData.append("type", type);
@@ -252,12 +282,12 @@ function Upload() {
       });
 
       setSuccessMessage(
-        response.data?.message ?? "Your PDF has been submitted successfully.",
+        response.data?.message ?? `Your ${mediaLabel} has been submitted successfully.`,
       );
 
       setDone(true);
     } catch (err: unknown) {
-      console.error("PDF upload failed:", err);
+      console.error("Upload failed:", err);
 
       if (axios.isAxiosError(err)) {
         const data = err.response?.data;
@@ -271,31 +301,23 @@ function Upload() {
             // Display Django field validation errors.
             const fieldErrors = Object.entries(data)
               .map(([field, messages]) => {
-                const text = Array.isArray(messages)
-                  ? messages.join(" ")
-                  : String(messages);
+                const text = Array.isArray(messages) ? messages.join(" ") : String(messages);
 
                 return `${field}: ${text}`;
               })
               .join(" ");
 
-            setError(
-              fieldErrors || `Upload failed (HTTP ${err.response?.status}).`,
-            );
+            setError(fieldErrors || `Upload failed (HTTP ${err.response?.status}).`);
           }
         } else if (err.response) {
-          setError(
-            `Upload failed (HTTP ${err.response.status}). Please try again.`,
-          );
+          setError(`Upload failed (HTTP ${err.response.status}). Please try again.`);
         } else {
           setError(
             "Cannot connect to the server. Check your internet connection and Django server.",
           );
         }
       } else {
-        setError(
-          err instanceof Error ? err.message : "An unexpected error occurred.",
-        );
+        setError(err instanceof Error ? err.message : "An unexpected error occurred.");
       }
     } finally {
       setLoading(false);
@@ -307,7 +329,7 @@ function Upload() {
 
   // What the person still has to fill in before they can submit.
   const requirements = [
-    { label: "PDF selected", met: Boolean(file) },
+    { label: `${mediaLabel} selected`, met: Boolean(file) },
     { label: "Title added", met: Boolean(title.trim()) },
     { label: "Course chosen", met: Boolean(courseId) },
     {
@@ -322,7 +344,9 @@ function Upload() {
     {
       icon: ShieldCheck,
       title: "File check",
-      text: "We make sure the PDF opens, isn't encrypted, and isn't a duplicate.",
+      text: isVideo
+        ? "We make sure the video plays and isn't a duplicate."
+        : "We make sure the PDF opens, isn't encrypted, and isn't a duplicate.",
     },
     {
       icon: GraduationCap,
@@ -339,12 +363,11 @@ function Upload() {
   // Success screen.
   if (done) {
     const summary = [
+      { label: "Kind", value: isVideo ? "Video" : "PDF" },
       { label: "Title", value: title.trim() },
       {
         label: "Course",
-        value: selectedCourse
-          ? `${selectedCourse.code} — ${selectedCourse.title}`
-          : "—",
+        value: selectedCourse ? `${selectedCourse.code} — ${selectedCourse.title}` : "—",
       },
       { label: "Type", value: selectedType.label },
       { label: "Intake and section", value: `${intake.trim()} / ${section.trim()}` },
@@ -363,14 +386,11 @@ function Upload() {
             <CheckCircle2 className="h-9 w-9 text-success" />
           </span>
 
-          <h1 className="mt-6 text-3xl font-semibold tracking-tight">
-            Sent for review
-          </h1>
+          <h1 className="mt-6 text-3xl font-semibold tracking-tight">Sent for review</h1>
 
           <p className="mt-3 text-muted-foreground">{successMessage}</p>
           <p className="mx-auto mt-2 max-w-sm text-sm leading-relaxed text-muted-foreground">
-            Other students will see it once a teacher for the course approves
-            it.
+            Other students will see it once a teacher for the course approves it.
           </p>
         </div>
 
@@ -381,19 +401,13 @@ function Upload() {
               className="flex items-baseline justify-between gap-6 px-5 py-3 text-sm"
             >
               <dt className="shrink-0 text-muted-foreground">{row.label}</dt>
-              <dd className="min-w-0 truncate text-right font-medium">
-                {row.value}
-              </dd>
+              <dd className="min-w-0 truncate text-right font-medium">{row.value}</dd>
             </div>
           ))}
         </dl>
 
         <div className="mt-6 flex flex-col gap-3">
-          <Link
-            to="/profile/$id"
-            params={{ id: "me" }}
-            className="btn-primary text-center"
-          >
+          <Link to="/profile/$id" params={{ id: "me" }} className="btn-primary text-center">
             View my uploads
           </Link>
 
@@ -413,7 +427,7 @@ function Upload() {
             }}
             className="btn-ghost"
           >
-            Upload another PDF
+            Upload another {mediaLabel}
           </button>
         </div>
       </div>
@@ -423,13 +437,11 @@ function Upload() {
   return (
     <div className="mx-auto max-w-5xl px-4 py-12 sm:py-16">
       <header className="max-w-xl">
-        <h1 className="text-4xl font-semibold tracking-tight">
-          Upload a PDF
-        </h1>
+        <h1 className="text-4xl font-semibold tracking-tight">Upload</h1>
 
         <p className="mt-3 leading-relaxed text-muted-foreground">
-          Share your notes or exam suggestions with your university community.
-          A teacher reviews every upload before it goes live.
+          Share your notes or video lessons with your university community. A teacher reviews every
+          upload before it goes live.
         </p>
       </header>
 
@@ -440,16 +452,79 @@ function Upload() {
       >
         {/* Main form */}
         <div className="paper-card divide-y divide-border">
+          {/* Media kind: PDF or Video */}
+          <section className="p-6 sm:p-8">
+            <h2 className="text-lg font-semibold">What are you sharing?</h2>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Pick a section, then add your file.
+            </p>
+
+            <div
+              className="mt-5 grid gap-3 sm:grid-cols-2"
+              role="radiogroup"
+              aria-label="Upload kind"
+            >
+              {(
+                [
+                  {
+                    value: "pdf" as MediaKind,
+                    label: "PDF upload",
+                    hint: "Notes, suggestions, slides — up to 20 MB",
+                    Icon: FileText,
+                  },
+                  {
+                    value: "video" as MediaKind,
+                    label: "Video upload",
+                    hint: "Recorded lessons, walkthroughs — up to 500 MB",
+                    Icon: Clapperboard,
+                  },
+                ] as const
+              ).map(({ value, label, hint, Icon }) => {
+                const active = mediaKind === value;
+                return (
+                  <button
+                    key={value}
+                    type="button"
+                    role="radio"
+                    aria-checked={active}
+                    disabled={loading}
+                    onClick={() => switchMedia(value)}
+                    className={`flex items-start gap-3 rounded-xl border p-4 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 ${
+                      active ? "border-primary bg-primary/5" : "border-border hover:bg-secondary/60"
+                    }`}
+                  >
+                    <span
+                      className={`grid h-10 w-10 shrink-0 place-items-center rounded-lg ${
+                        active ? "bg-primary/10 text-primary" : "bg-secondary text-muted-foreground"
+                      }`}
+                    >
+                      <Icon className="h-5 w-5" />
+                    </span>
+                    <span className="min-w-0">
+                      <span className="flex items-center gap-2 text-sm font-medium">
+                        {label}
+                        {active && <CheckCircle2 className="h-4 w-4 text-primary" />}
+                      </span>
+                      <span className="mt-1 block text-xs leading-relaxed text-muted-foreground">
+                        {hint}
+                      </span>
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </section>
+
           {/* File */}
           <section className="p-6 sm:p-8">
             <h2 className="text-lg font-semibold">Your file</h2>
             <p className="mt-1 text-sm text-muted-foreground">
-              PDF only, up to 20 MB.
+              {isVideo ? "MP4, WebM or MOV, up to 500 MB." : "PDF only, up to 20 MB."}
             </p>
 
             {!file ? (
               <label
-                htmlFor="pdf-file"
+                htmlFor="media-file"
                 onDragOver={(e) => {
                   e.preventDefault();
                   if (!loading) setDragging(true);
@@ -471,31 +546,38 @@ function Upload() {
                 </span>
 
                 <span className="text-base font-medium">
-                  {dragging ? "Drop to add your PDF" : "Drag a PDF here"}
+                  {dragging ? `Drop to add your ${mediaLabel}` : `Drag a ${mediaLabel} here`}
                 </span>
 
                 <span className="text-sm text-muted-foreground">
-                  or <span className="font-medium text-primary underline underline-offset-4">browse your files</span>
+                  or{" "}
+                  <span className="font-medium text-primary underline underline-offset-4">
+                    browse your files
+                  </span>
                 </span>
               </label>
             ) : (
               <div className="mt-5 rounded-xl border border-border bg-secondary/40 p-4">
                 <div className="flex items-center gap-4">
                   <span className="grid h-12 w-12 shrink-0 place-items-center rounded-lg bg-primary/10 text-primary">
-                    <FileText className="h-6 w-6" />
+                    {isVideo ? (
+                      <Clapperboard className="h-6 w-6" />
+                    ) : (
+                      <FileText className="h-6 w-6" />
+                    )}
                   </span>
 
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-sm font-medium">{file.name}</p>
                     <p className="mt-0.5 text-xs text-muted-foreground">
-                      {formatSize(file.size)} · PDF
+                      {formatSize(file.size)} · {isVideo ? "Video" : "PDF"}
                     </p>
                   </div>
 
                   {!loading && (
                     <>
                       <label
-                        htmlFor="pdf-file"
+                        htmlFor="media-file"
                         className="cursor-pointer rounded-md px-3 py-1.5 text-sm font-medium text-primary hover:bg-primary/10 focus-within:ring-2 focus-within:ring-primary/40"
                       >
                         Change
@@ -540,9 +622,9 @@ function Upload() {
 
             <input
               ref={fileInputRef}
-              id="pdf-file"
+              id="media-file"
               type="file"
-              accept=".pdf,application/pdf"
+              accept={isVideo ? "video/mp4,video/webm,video/quicktime,.mp4,.webm,.mov" : ".pdf,application/pdf"}
               className="sr-only"
               onChange={handleFileChange}
               disabled={loading}
@@ -572,7 +654,11 @@ function Upload() {
                 id="title"
                 name="title"
                 className="field w-full"
-                placeholder="e.g. Data Structures - Chapter 1 Notes"
+                placeholder={
+                  isVideo
+                    ? "e.g. Data Structures - Chapter 1 Walkthrough"
+                    : "e.g. Data Structures - Chapter 1 Notes"
+                }
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
                 maxLength={200}
@@ -629,7 +715,11 @@ function Upload() {
                 name="description"
                 className="field w-full"
                 rows={4}
-                placeholder="What does this PDF cover? Mention chapters, topics, or the exam it's for."
+                placeholder={
+                  isVideo
+                    ? "What does this video cover? Mention chapters, topics, or the exam it's for."
+                    : "What does this PDF cover? Mention chapters, topics, or the exam it's for."
+                }
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
                 maxLength={2000}
@@ -731,9 +821,7 @@ function Upload() {
 
             <button
               type="submit"
-              disabled={
-                loading || coursesLoading || courses.length === 0 || !ready
-              }
+              disabled={loading || coursesLoading || courses.length === 0 || !ready}
               className="btn-primary inline-flex w-full items-center justify-center gap-2 py-3 disabled:cursor-not-allowed disabled:opacity-50"
             >
               {loading ? (
@@ -751,10 +839,8 @@ function Upload() {
 
             <p className="text-center text-xs text-muted-foreground" aria-live="polite">
               {ready || loading
-                ? "Your PDF stays private until a course teacher approves it."
-                : `Still needed: ${missing
-                    .map((m) => m.label.toLowerCase())
-                    .join(", ")}.`}
+                ? `Your ${mediaLabel} stays private until a course teacher approves it.`
+                : `Still needed: ${missing.map((m) => m.label.toLowerCase()).join(", ")}.`}
             </p>
           </section>
         </div>
@@ -773,11 +859,7 @@ function Upload() {
                     <Circle className="h-4 w-4 shrink-0 text-border" />
                   )}
 
-                  <span
-                    className={
-                      r.met ? "text-foreground" : "text-muted-foreground"
-                    }
-                  >
+                  <span className={r.met ? "text-foreground" : "text-muted-foreground"}>
                     {r.label}
                   </span>
                 </li>

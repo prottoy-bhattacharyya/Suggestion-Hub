@@ -34,7 +34,7 @@ class NoteAdmin(admin.ModelAdmin):
     def get_list_display(self, request):
         return [field.name for field in self.model._meta.fields]
     search_fields = ("title", "description")
-    list_filter = ("review_status", "type", "course")
+    list_filter = ("review_status", "type", "course", "intake", "section", "file_type")
     # decision (b): only review_status + approved_at editable — approve from the admin!
     # fields = ("review_status", "approved_at")
 

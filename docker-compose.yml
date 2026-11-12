@@ -57,6 +57,8 @@ services:
       - ./backend:/app
       # keep the container's .venv from being hidden by that bind mount
       - backend-venv:/app/.venv
+      # keep uploaded files in Docker-managed storage instead of exposing host files
+      - ./backend/uploaded_notes:/app/uploaded_notes
     depends_on:
       db:
         condition: service_healthy
@@ -77,3 +79,4 @@ volumes:
   db-data:
   backend-venv:
   frontend-node_modules:
+  uploaded-notes:

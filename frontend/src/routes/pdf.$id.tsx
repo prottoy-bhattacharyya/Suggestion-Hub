@@ -72,6 +72,7 @@ type NoteDetail = {
   is_owner: boolean;
   my_rating: number;
   file_url: string;
+  file_type?: "pdf" | "video";
 };
 
 const REASONS = ["Wrong content", "Copyright", "Inappropriate", "Corrupted file", "Duplicate"];
@@ -241,18 +242,33 @@ function PdfPage() {
                 </a>
               </div>
             </div>
-            <iframe
-              src={note.file_url}
-              title={note.title}
-              className="aspect-[3/4] max-h-[80vh] min-h-[500px] w-full bg-muted"
-            >
-              <p>
-                Your browser cannot display PDFs.{" "}
+            {note.file_type === "video" ? (
+              <video
+                src={note.file_url}
+                controls
+                playsInline
+                preload="metadata"
+                className="aspect-video max-h-[80vh] min-h-[500px] w-full bg-black"
+              >
+                Your browser cannot play this video.{" "}
                 <a href={note.file_url} target="_blank" rel="noopener noreferrer">
                   Open it here instead.
                 </a>
-              </p>
-            </iframe>
+              </video>
+            ) : (
+              <iframe
+                src={note.file_url}
+                title={note.title}
+                className="aspect-[3/4] max-h-[80vh] min-h-[500px] w-full bg-muted"
+              >
+                <p>
+                  Your browser cannot display PDFs.{" "}
+                  <a href={note.file_url} target="_blank" rel="noopener noreferrer">
+                    Open it here instead.
+                  </a>
+                </p>
+              </iframe>
+            )}
           </div>
         </div>
 

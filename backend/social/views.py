@@ -2,6 +2,7 @@ import json
 from django.http import JsonResponse
 from django.shortcuts import render
 from core.utils import get_db_connection
+from django.views.decorators.csrf import csrf_exempt
 
 # Create your views here.
 def follow(request, user_id):
@@ -132,3 +133,66 @@ def is_following(request):
         )
     finally:
         conn.close()
+
+@csrf_exempt
+def comments(request):
+    session_user = request.session.get('user')
+    if not session_user:
+        return JsonResponse(
+            {"status": "failed", "error": "You need to login first."},
+            status=401,
+        )
+    conn = get_db_connection()
+
+    if request.method == "GET":
+        note_id = request.GET.get("note_id")
+        if not note_id:
+            return JsonResponse(
+                {"status": "failed", "error": "Note ID is required."},
+                status=400,
+            )
+        with conn.cursor(dictionary=True) as cursor:
+            cursor.execute(
+                """
+                SELECT 
+                    c.id, u.id as user_id, u.full_name as commenter_name, 
+                    c.body as comment, c.created_at
+                FROM comments c
+                JOIN users u ON c.user_id = u.id
+                WHERE c.note_id = %s
+                ORDER BY c.created_at DESC
+                """,
+                (note_id,),
+            )
+            comments = cursor.fetchall()
+
+            for comment in comments:
+                comment["created_at"] = comment["created_at"].strftime("%Y-%m-%d %H:%M:%S")
+            
+        return JsonResponse({"status": "success", "comments": comments})
+
+    if request.method == "POST":
+        note_id = request.POST.get("note_id")
+        comment_text = request.POST.get("comment_text", "").strip()
+        if not note_id:
+            return JsonResponse(
+                {"status": "failed", "error": "Note ID is required."},
+                status=400,
+            )
+        if not comment_text:
+            return JsonResponse(
+                {"status": "failed", "error": "Comment text is required."},
+                status=400,
+            )
+
+        with conn.cursor() as cursor:
+            cursor.execute(
+                """
+                INSERT INTO comments (user_id, note_id, body)
+                VALUES (%s, %s, %s)
+                """,
+                (session_user["id"], note_id, comment_text),
+            )
+            conn.commit()
+
+        return JsonResponse({"status": "success", "message": "Comment added."})

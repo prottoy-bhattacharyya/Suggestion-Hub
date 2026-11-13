@@ -1,7 +1,5 @@
 from django.contrib import admin
-from .models import Department, Course, HubUser, TeacherCourse, Note, Review, Rating, Follow, Notification, Report
-
-# Register your models here.
+from .models import *
 @admin.register(Department)
 class DepartmentAdmin(admin.ModelAdmin):
     def get_list_display(self, request):
@@ -48,6 +46,12 @@ class ReviewAdmin(admin.ModelAdmin):
 class RatingAdmin(admin.ModelAdmin):
     def get_list_display(self, request):
         return [field.name for field in self.model._meta.fields]
+
+@admin.register(Comment)
+class CommentAdmin(admin.ModelAdmin):
+    def get_list_display(self, request):
+        return [field.name for field in self.model._meta.fields]
+    list_filter = ("note", "user")
 
 @admin.register(Follow)
 class FollowAdmin(admin.ModelAdmin):

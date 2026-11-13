@@ -1,5 +1,5 @@
 import { createFileRoute, Link, notFound } from "@tanstack/react-router";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   ArrowLeft,
   BookOpen,
@@ -12,6 +12,8 @@ import {
   LoaderCircle,
   Star,
   Users,
+  MessageCircle,
+  Send,
 } from "lucide-react";
 import { StatusPill, Stars } from "@/components/PdfCard";
 import { getCSRFToken } from "@/lib/utils";
@@ -20,7 +22,6 @@ import axios from "axios";
 
 export const Route = createFileRoute("/pdf/$id")({
   loader: async ({ params }) => {
-    // Mock links used ids like "p1"; real links are numeric — both strip to 1.
     const noteId = Number.parseInt(params.id.replace(/\D/g, ""), 10);
 
     if (!Number.isFinite(noteId)) {
@@ -31,13 +32,13 @@ export const Route = createFileRoute("/pdf/$id")({
       const { data } = await api.get(`/notes/${noteId}/detail/`);
       return { note: data.note };
     } catch (error) {
-      // 404 = genuinely missing; 403 = you can't see this pending note.
       if (axios.isAxiosError(error) && error.response?.status === 403) {
         throw notFound();
       }
       throw notFound();
     }
   },
+
   head: ({ loaderData }) => ({
     meta: [
       { title: `${loaderData?.note.title ?? "PDF"} — Suggestion Hub` },
@@ -52,6 +53,7 @@ export const Route = createFileRoute("/pdf/$id")({
       },
     ],
   }),
+
   component: PdfPage,
 });
 
@@ -75,11 +77,280 @@ type NoteDetail = {
   file_type?: "pdf" | "video";
 };
 
+type Comment = {
+  id: number;
+  user_id: number;
+  commenter_name: string;
+  comment: string;
+  created_at: string;
+};
+
 const REASONS = ["Wrong content", "Copyright", "Inappropriate", "Corrupted file", "Duplicate"];
+
+function CommentsSection({ noteId }: { noteId: number }) {
+  const [comments, setComments] = useState<Comment[]>([]);
+  const [commentText, setCommentText] = useState("");
+  const [commentsLoading, setCommentsLoading] = useState(true);
+  const [commentSubmitting, setCommentSubmitting] = useState(false);
+  const [commentsError, setCommentsError] = useState("");
+  const [commentSuccess, setCommentSuccess] = useState("");
+
+  async function fetchComments() {
+    setCommentsLoading(true);
+    setCommentsError("");
+
+    try {
+      const response = await api.get("/social/comments/", {
+        params: {
+          note_id: noteId,
+        },
+      });
+
+      if (response.data.status === "success") {
+        setComments(response.data.comments ?? []);
+      } else {
+        setCommentsError("Could not load comments.");
+      }
+    } catch (error: unknown) {
+      console.error("Failed to fetch comments:", error);
+
+      if (axios.isAxiosError(error)) {
+        setCommentsError(
+          error.response?.data?.error ??
+            error.response?.data?.detail ??
+            "Could not load comments. Please try again.",
+        );
+      } else {
+        setCommentsError("An unexpected error occurred.");
+      }
+    } finally {
+      setCommentsLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    void fetchComments();
+  }, [noteId]);
+
+  async function handleCommentSubmit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    const trimmedComment = commentText.trim();
+
+    if (!trimmedComment || commentSubmitting) return;
+
+    setCommentSubmitting(true);
+    setCommentsError("");
+    setCommentSuccess("");
+
+    try {
+      const csrfToken = await getCSRFToken();
+
+      const formData = new FormData();
+      formData.append("note_id", String(noteId));
+      formData.append("comment_text", trimmedComment);
+
+      await api.post("/social/comments/", formData, {
+        headers: {
+          Accept: "application/json",
+          ...(csrfToken ? { "X-CSRFToken": csrfToken } : {}),
+        },
+      });
+
+      setCommentText("");
+      setCommentSuccess("Your comment was posted successfully.");
+
+      await fetchComments();
+    } catch (error: unknown) {
+      console.error("Failed to post comment:", error);
+
+      if (axios.isAxiosError(error)) {
+        setCommentsError(
+          error.response?.data?.error ??
+            error.response?.data?.detail ??
+            "Could not post your comment. Please try again.",
+        );
+      } else {
+        setCommentsError("An unexpected error occurred.");
+      }
+    } finally {
+      setCommentSubmitting(false);
+    }
+  }
+
+  function formatCommentDate(date: string) {
+    const parsedDate = new Date(date.includes("T") ? date : date.replace(" ", "T") + "Z");
+
+    if (Number.isNaN(parsedDate.getTime())) {
+      return date;
+    }
+
+    return parsedDate.toLocaleString(undefined, {
+      year: "numeric",
+      month: "short",
+      day: "numeric",
+      hour: "numeric",
+      minute: "2-digit",
+    });
+  }
+
+  return (
+    <section className="mt-8 rounded-3xl border border-border/60 bg-card p-5 shadow-xl shadow-primary/5 sm:p-7">
+      {/* Section heading */}
+      <div className="mb-6 flex items-center justify-between gap-3">
+        <div>
+          <div className="flex items-center gap-2">
+            <MessageCircle className="h-5 w-5 text-primary" />
+            <h2 className="text-xl font-semibold tracking-tight">Comments</h2>
+          </div>
+
+          <p className="mt-1 text-sm text-muted-foreground">
+            Discuss this material, ask questions, and help other students.
+          </p>
+        </div>
+
+        <span className="shrink-0 rounded-full bg-secondary px-3 py-1 text-xs font-semibold">
+          {comments.length} {comments.length === 1 ? "comment" : "comments"}
+        </span>
+      </div>
+
+      {/* Add comment form */}
+      <form onSubmit={handleCommentSubmit} className="mb-7">
+        <label htmlFor="comment-text" className="mb-2 block text-sm font-medium">
+          Write a comment
+        </label>
+
+        <textarea
+          id="comment-text"
+          value={commentText}
+          onChange={(event) => setCommentText(event.target.value)}
+          placeholder="Share your thoughts or ask a question..."
+          rows={3}
+          maxLength={2000}
+          disabled={commentSubmitting}
+          className="w-full resize-none rounded-2xl border border-border bg-background px-4 py-3 text-sm outline-none transition-colors placeholder:text-muted-foreground focus:border-primary/50 focus:ring-2 focus:ring-primary/15 disabled:opacity-60"
+        />
+
+        <div className="mt-2 flex items-center justify-between gap-3">
+          <span className="text-xs text-muted-foreground">{commentText.length}/2000</span>
+
+          <button
+            type="submit"
+            disabled={!commentText.trim() || commentSubmitting}
+            className="inline-flex items-center gap-2 rounded-full bg-primary px-5 py-2.5 text-sm font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {commentSubmitting ? (
+              <>
+                <LoaderCircle className="h-4 w-4 animate-spin" />
+                Posting...
+              </>
+            ) : (
+              <>
+                <Send className="h-4 w-4" />
+                Post comment
+              </>
+            )}
+          </button>
+        </div>
+      </form>
+
+      {/* Success message */}
+      {commentSuccess && (
+        <div className="mb-4 rounded-xl border border-success/30 bg-success/5 p-3 text-sm text-success">
+          {commentSuccess}
+        </div>
+      )}
+
+      {/* Error message */}
+      {commentsError && (
+        <div
+          role="alert"
+          className="mb-4 rounded-xl border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive"
+        >
+          {commentsError}
+
+          <button
+            type="button"
+            onClick={fetchComments}
+            disabled={commentsLoading}
+            className="ml-2 font-semibold underline"
+          >
+            Try again
+          </button>
+        </div>
+      )}
+
+      {/* Comments list */}
+      <div className="space-y-4">
+        {commentsLoading ? (
+          <div className="flex items-center justify-center gap-2 py-10 text-sm text-muted-foreground">
+            <LoaderCircle className="h-4 w-4 animate-spin" />
+            Loading comments...
+          </div>
+        ) : comments.length === 0 ? (
+          <div className="rounded-2xl border border-dashed border-border py-10 text-center">
+            <MessageCircle className="mx-auto h-8 w-8 text-muted-foreground/50" />
+
+            <p className="mt-3 text-sm font-medium">No comments yet</p>
+
+            <p className="mt-1 text-xs text-muted-foreground">
+              Be the first to start a discussion.
+            </p>
+          </div>
+        ) : (
+          comments.map((comment) => {
+            const initials = comment.commenter_name
+              .split(" ")
+              .map((word) => word[0])
+              .join("")
+              .slice(0, 2)
+              .toUpperCase();
+
+            return (
+              <article
+                key={comment.id}
+                className="flex gap-3 rounded-2xl border border-border/50 bg-background/50 p-4"
+              >
+                <Link
+                  to="/profile/$id"
+                  params={{ id: String(comment.user_id) }}
+                  aria-label={`View ${comment.commenter_name}'s profile`}
+                  className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-primary/10 text-sm font-semibold text-primary transition-colors hover:bg-primary/20"
+                >
+                  {initials || "U"}
+                </Link>
+
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center justify-between gap-2 hover:gap-3 transition-all">
+                    <Link
+                      to="/profile/$id"
+                      params={{ id: String(comment.user_id) }}
+                      className="text-sm font-semibold transition-colors hover:text-primary"
+                    >
+                      {comment.commenter_name}
+                    </Link>
+
+                    <time className="text-xs text-muted-foreground">
+                      {formatCommentDate(comment.created_at)}
+                    </time>
+                  </div>
+
+                  <p className="mt-2 whitespace-pre-wrap break-words text-sm leading-relaxed text-muted-foreground">
+                    {comment.comment}
+                  </p>
+                </div>
+              </article>
+            );
+          })
+        )}
+      </div>
+    </section>
+  );
+}
 
 function PdfPage() {
   const loader = Route.useLoaderData();
-  const note = loader.note;
+  const note: NoteDetail = loader.note;
 
   const [ratingAvg, setRatingAvg] = useState(note.rating_avg);
   const [ratingCount, setRatingCount] = useState(note.rating_count);
@@ -182,12 +453,14 @@ function PdfPage() {
   const avg = Number(ratingAvg);
   const activeStars = hoverRating || myRating;
   const starLabels = ["", "Poor", "Fair", "Good", "Great", "Excellent"];
+
   const uploaderInitials = note.uploader_name
     .split(" ")
     .map((w: string) => w[0])
     .join("")
     .slice(0, 2)
     .toUpperCase();
+
   const formattedDate = note.created_at
     ? new Date(note.created_at).toLocaleDateString(undefined, {
         year: "numeric",
@@ -222,6 +495,7 @@ function PdfPage() {
                 </div>
                 <span className="truncate text-sm font-medium">{note.title}</span>
               </div>
+
               <div className="flex shrink-0 items-center gap-1">
                 <a
                   href={note.file_url}
@@ -231,6 +505,7 @@ function PdfPage() {
                 >
                   <Download className="h-4 w-4" />
                 </a>
+
                 <a
                   href={note.file_url}
                   target="_blank"
@@ -242,6 +517,7 @@ function PdfPage() {
                 </a>
               </div>
             </div>
+
             {note.file_type === "video" ? (
               <video
                 src={note.file_url}
@@ -283,6 +559,7 @@ function PdfPage() {
                   {note.course_code}
                 </span>
               )}
+
               <span
                 className={`rounded-full px-3 py-0.5 text-[11px] font-semibold uppercase tracking-[0.14em] ${
                   note.type === "note"
@@ -292,9 +569,8 @@ function PdfPage() {
               >
                 {note.type}
               </span>
-              {note.review_status !== "approved" && (
-                <StatusPill status={note.review_status} />
-              )}
+
+              {note.review_status !== "approved" && <StatusPill status={note.review_status} />}
             </div>
 
             <h1 className="relative mt-4 text-2xl font-semibold leading-tight tracking-tight sm:text-3xl">
@@ -312,6 +588,7 @@ function PdfPage() {
               <span className="font-display text-3xl font-semibold tabular-nums">
                 {avg > 0 ? avg.toFixed(1) : "—"}
               </span>
+
               <div>
                 <Stars value={avg} />
                 <p className="mt-0.5 text-xs text-muted-foreground">
@@ -325,7 +602,10 @@ function PdfPage() {
             {meta.length > 0 && (
               <dl className="relative mt-5 grid grid-cols-3 gap-2">
                 {meta.map(({ icon: Icon, label, value }) => (
-                  <div key={label} className="rounded-2xl border border-border/60 bg-background/60 px-3 py-2.5">
+                  <div
+                    key={label}
+                    className="rounded-2xl border border-border/60 bg-background/60 px-3 py-2.5"
+                  >
                     <dt className="flex items-center gap-1 text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
                       <Icon className="h-3 w-3" /> {label}
                     </dt>
@@ -344,8 +624,11 @@ function PdfPage() {
               <div className="grid h-10 w-10 place-items-center rounded-xl bg-primary font-display text-sm text-primary-foreground">
                 {uploaderInitials}
               </div>
+
               <div className="min-w-0">
-                <p className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground">Uploaded by</p>
+                <p className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
+                  Uploaded by
+                </p>
                 <p className="truncate text-sm font-semibold">{note.uploader_name}</p>
               </div>
             </Link>
@@ -359,6 +642,7 @@ function PdfPage() {
               >
                 <ExternalLink className="h-4 w-4" /> Full screen
               </a>
+
               <a
                 href={note.file_url}
                 download
@@ -376,14 +660,22 @@ function PdfPage() {
                 <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
                   {note.is_owner ? "Your upload" : myRating ? "Your rating" : "Rate this PDF"}
                 </p>
-                {ratingLoading && <LoaderCircle className="h-4 w-4 animate-spin text-muted-foreground" />}
+
+                {ratingLoading && (
+                  <LoaderCircle className="h-4 w-4 animate-spin text-muted-foreground" />
+                )}
               </div>
 
               {note.is_owner ? (
-                <p className="mt-2 text-sm text-muted-foreground">You can't rate your own upload.</p>
+                <p className="mt-2 text-sm text-muted-foreground">
+                  You can't rate your own upload.
+                </p>
               ) : (
                 <>
-                  <div className="mt-3 flex items-center gap-1" onMouseLeave={() => setHoverRating(0)}>
+                  <div
+                    className="mt-3 flex items-center gap-1"
+                    onMouseLeave={() => setHoverRating(0)}
+                  >
                     {[1, 2, 3, 4, 5].map((star) => (
                       <button
                         key={star}
@@ -401,6 +693,7 @@ function PdfPage() {
                         />
                       </button>
                     ))}
+
                     <span className="ml-2 text-sm font-medium text-muted-foreground">
                       {starLabels[activeStars] ?? ""}
                     </span>
@@ -408,14 +701,18 @@ function PdfPage() {
 
                   {myRating > 0 && (
                     <p className="mt-2 text-xs text-muted-foreground">
-                      You rated this {myRating} star{myRating === 1 ? "" : "s"}. Tap a star to change it.
+                      You rated this {myRating} star
+                      {myRating === 1 ? "" : "s"}. Tap a star to change it.
                     </p>
                   )}
                 </>
               )}
 
               {ratingError && (
-                <p className="mt-3 rounded-xl border border-destructive/30 bg-destructive/5 p-2.5 text-xs text-destructive" role="alert">
+                <p
+                  className="mt-3 rounded-xl border border-destructive/30 bg-destructive/5 p-2.5 text-xs text-destructive"
+                  role="alert"
+                >
                   {ratingError}
                 </p>
               )}
@@ -434,7 +731,10 @@ function PdfPage() {
                 </div>
 
                 <div>
-                  <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">Reason</p>
+                  <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                    Reason
+                  </p>
+
                   <div className="flex flex-wrap gap-1.5" role="radiogroup" aria-label="Reason">
                     {REASONS.map((reason) => (
                       <button
@@ -463,6 +763,7 @@ function PdfPage() {
                   >
                     Details (optional)
                   </label>
+
                   <textarea
                     id="report-detail"
                     className="w-full resize-none rounded-2xl border border-border bg-background px-4 py-3 text-sm outline-none transition-colors focus:border-primary/50 focus:ring-2 focus:ring-primary/15"
@@ -473,13 +774,17 @@ function PdfPage() {
                     maxLength={1000}
                     disabled={reportLoading}
                   />
+
                   <p className="mt-1 text-right text-[10px] tabular-nums text-muted-foreground">
                     {reportDetail.length}/1000
                   </p>
                 </div>
 
                 {reportError && (
-                  <p className="rounded-xl border border-destructive/30 bg-destructive/5 p-2.5 text-xs text-destructive" role="alert">
+                  <p
+                    className="rounded-xl border border-destructive/30 bg-destructive/5 p-2.5 text-xs text-destructive"
+                    role="alert"
+                  >
                     {reportError}
                   </p>
                 )}
@@ -492,12 +797,14 @@ function PdfPage() {
                   >
                     {reportLoading ? (
                       <>
-                        <LoaderCircle className="h-4 w-4 animate-spin" /> Sending
+                        <LoaderCircle className="h-4 w-4 animate-spin" />
+                        Sending
                       </>
                     ) : (
                       "Send report"
                     )}
                   </button>
+
                   <button
                     type="button"
                     onClick={() => setReportFormOpen(false)}
@@ -525,6 +832,9 @@ function PdfPage() {
           )}
         </aside>
       </div>
+
+      {/* Comments section */}
+      {note.review_status === "approved" && <CommentsSection noteId={note.id} />}
     </div>
   );
 }

@@ -115,6 +115,15 @@ class Follow(models.Model):
         managed = False
         db_table = "follows"
 
+class Comment(models.Model):
+    note = models.ForeignKey(Note, models.DO_NOTHING, db_column="note_id", related_name="+")
+    user = models.ForeignKey(HubUser, models.DO_NOTHING, db_column="user_id", related_name="+")
+    body = models.TextField()
+    created_at = models.DateTimeField()
+    class Meta:
+        managed = False
+        db_table = "comments"
+
 class Notification(models.Model):
     user = models.ForeignKey(HubUser, models.DO_NOTHING, db_column="user_id", related_name="+")
     type = models.CharField(max_length=30, choices=[("new_pending_note","new_pending_note"),("note_approved","note_approved"),("note_rejected","note_rejected"),("followed_user_upload","followed_user_upload")])

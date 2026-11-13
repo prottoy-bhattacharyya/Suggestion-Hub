@@ -65,3 +65,41 @@ def feeds(request):
         conn.close()
 
 
+def get_feeds_by_following(request):
+    session_user = request.session.get('user')
+    if not session_user:
+        return JsonResponse(
+            {"status": "failed", "error": "You need to login first."},
+            status=401,
+        )
+
+    user_id = session_user.get("id")
+
+    conn = get_db_connection()
+    try:
+        with conn.cursor(dictionary=True) as cursor:
+            cursor.execute(
+                """
+                SELECT n.id, n.title, n.description, n.type, n.intake, n.section,
+                       n.rating_avg, n.rating_count, n.created_at, n.review_status,
+                       u.full_name AS uploader_name, r.comment AS review_comment,
+                       n.file_type
+                FROM notes n
+                JOIN users u ON n.uploader_id = u.id
+                LEFT JOIN reviews r ON n.id = r.note_id
+                WHERE u.id IN (
+                    SELECT following_id FROM follows WHERE follower_id = %s
+                )
+                AND n.review_status = 'approved'
+                """,
+                (user_id,),
+            )
+            notes = cursor.fetchall()
+
+        for note in notes:
+            note["created_at"] = note["created_at"].strftime("%Y-%m-%d") if note["created_at"] else None
+            note["file_url"] = request.build_absolute_uri(f"/notes/{note['id']}/file/")
+
+        return JsonResponse({"status": "success", "notes": notes})
+    finally:
+        conn.close()

@@ -168,6 +168,9 @@ def comments(request):
 
             for comment in comments:
                 comment["created_at"] = comment["created_at"].strftime("%Y-%m-%d %H:%M:%S")
+            for comment in comments:
+                if comment["user_id"] == session_user["id"]:
+                    comment["commenter_name"] = "You"
             
         return JsonResponse({"status": "success", "comments": comments})
 

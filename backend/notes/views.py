@@ -236,7 +236,7 @@ def get_notes(request):
                     'section': note[5],
                     'rating_avg': note[6],
                     'rating_count': note[7],
-                    'created_at': note[8].isoformat() if note[8] else None,
+                    'created_at': note[8].strftime("%Y-%m-%d %H:%M:%S") if note[8] else None,
                     'review_status': note[9],
                     'uploader_name': note[10],
                     'review_comment': note[11],

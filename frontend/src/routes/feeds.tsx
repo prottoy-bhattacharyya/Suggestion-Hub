@@ -23,6 +23,8 @@ import {
   Star,
   X,
   Video,
+  Users,
+  Compass,
 } from "lucide-react";
 
 export const Route = createFileRoute("/feeds")({
@@ -41,6 +43,7 @@ export const Route = createFileRoute("/feeds")({
 type AuthStatus = "checking" | "authenticated" | "unauthenticated";
 type SortOrder = "newest" | "oldest";
 type FileType = "pdf" | "video";
+type FeedMode = "normal" | "following";
 
 type CurrentUser = {
   id: number;
@@ -79,6 +82,9 @@ function Feed() {
   const [error, setError] = useState("");
   const [notes, setNotes] = useState<FeedNote[]>([]);
   const [notesLoading, setNotesLoading] = useState(false);
+
+  // Feed mode
+  const [feedMode, setFeedMode] = useState<FeedMode>("normal");
 
   // Filter state
   const [selectedCourses, setSelectedCourses] = useState<string[]>([]);
@@ -134,7 +140,7 @@ function Feed() {
     };
   }, []);
 
-  // Fetch feed notes after authentication
+  // Fetch the selected feed
   useEffect(() => {
     if (authStatus !== "authenticated") return;
 
@@ -144,27 +150,35 @@ function Feed() {
       try {
         setNotesLoading(true);
         setError("");
+        setNotes([]);
 
-        const response = await api.get<NotesResponse>(
-          "/feeds/get_feeds/",
-          {
-            headers: {
-              Accept: "application/json",
-            },
+        const endpoint =
+          feedMode === "following"
+            ? "/feeds/get_feeds_by_following/"
+            : "/feeds/get_feeds/";
+
+        const response = await api.get<NotesResponse>(endpoint, {
+          headers: {
+            Accept: "application/json",
           },
-        );
+        });
 
         if (!active) return;
 
         if (response.data.status === "success") {
           setNotes(response.data.notes ?? []);
         } else {
-          setError("Could not load the feed.");
+          setNotes([]);
+          setError(
+            response.data.message ?? "Could not load the selected feed.",
+          );
         }
       } catch (err) {
         console.error("Feed loading failed:", err);
 
         if (active) {
+          setNotes([]);
+
           setError(
             axios.isAxiosError(err)
               ? err.response?.data?.error ??
@@ -183,9 +197,9 @@ function Feed() {
     return () => {
       active = false;
     };
-  }, [authStatus]);
+  }, [authStatus, feedMode]);
 
-  // Generate filter options dynamically from API data
+  // Generate filter options dynamically from the currently loaded feed
   const courses = useMemo(
     () =>
       [...new Set(notes.map((note) => note.course_code).filter(Boolean))].sort(),
@@ -210,7 +224,6 @@ function Feed() {
     [notes],
   );
 
-  // File type options
   const fileTypes: FileType[] = ["pdf", "video"];
 
   // Apply filters and sorting
@@ -273,6 +286,7 @@ function Feed() {
   useEffect(() => {
     setShown(4);
   }, [
+    feedMode,
     selectedCourses,
     selectedTypes,
     selectedIntakes,
@@ -348,10 +362,8 @@ function Feed() {
     ...selectedFileTypes.map((v) => ({
       label: v.toUpperCase(),
       remove: () =>
-        toggleFilter(
-          v,
-          selectedFileTypes,
-          setSelectedFileTypes as Dispatch<SetStateAction<string[]>>,
+        setSelectedFileTypes((previous) =>
+          previous.filter((item) => item !== v),
         ),
     })),
 
@@ -365,7 +377,7 @@ function Feed() {
       : []),
   ];
 
-  // Reusable pill-style filter group
+  // Reusable filter group
   const FilterGroup = ({
     title,
     options,
@@ -469,7 +481,7 @@ function Feed() {
   return (
     <div className="mx-auto max-w-7xl px-4 py-10 sm:px-6 lg:py-14">
       {/* Hero header */}
-      <header className="relative mb-10 overflow-hidden rounded-3xl border border-border/60 bg-card px-6 py-8 sm:px-10 sm:py-10">
+      <header className="relative mb-8 overflow-hidden rounded-3xl border border-border/60 bg-card px-6 py-8 sm:px-10 sm:py-10">
         <div className="pointer-events-none absolute -right-20 -top-20 h-64 w-64 rounded-full bg-primary/10 blur-3xl" />
 
         <div className="relative flex flex-wrap items-end justify-between gap-6">
@@ -511,6 +523,53 @@ function Feed() {
         </div>
       </header>
 
+      {/* Feed mode selector - upper left */}
+      <div className="mb-7 flex flex-wrap items-center justify-between gap-4">
+        <div>
+          <p className="mb-2 text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+            Explore feeds
+          </p>
+
+          <div className="inline-flex flex-wrap items-center gap-1 rounded-2xl border border-border/70 bg-card p-1.5 shadow-sm">
+            <button
+              type="button"
+              onClick={() => setFeedMode("normal")}
+              disabled={notesLoading}
+              aria-pressed={feedMode === "normal"}
+              className={`inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold transition-all ${
+                feedMode === "normal"
+                  ? "bg-primary text-primary-foreground shadow-md"
+                  : "text-muted-foreground hover:bg-muted hover:text-foreground"
+              } disabled:cursor-wait disabled:opacity-70`}
+            >
+              <Compass className="h-4 w-4" />
+              For You
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setFeedMode("following")}
+              disabled={notesLoading}
+              aria-pressed={feedMode === "following"}
+              className={`inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold transition-all ${
+                feedMode === "following"
+                  ? "bg-primary text-primary-foreground shadow-md"
+                  : "text-muted-foreground hover:bg-muted hover:text-foreground"
+              } disabled:cursor-wait disabled:opacity-70`}
+            >
+              <Users className="h-4 w-4" />
+              Following
+            </button>
+          </div>
+        </div>
+
+        <p className="text-xs text-muted-foreground">
+          {feedMode === "following"
+            ? "Notes shared by people you follow"
+            : "Discover notes from your university community"}
+        </p>
+      </div>
+
       <div className="grid grid-cols-1 items-start gap-8 lg:grid-cols-[minmax(0,1fr)_300px]">
         {/* Main feed */}
         <main className="min-w-0">
@@ -525,16 +584,22 @@ function Feed() {
 
           {/* Toolbar */}
           <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
-            <p className="text-sm text-muted-foreground">
-              Showing{" "}
-              <span className="font-semibold text-foreground">
-                {Math.min(shown, filteredNotes.length)}
-              </span>{" "}
-              of{" "}
-              <span className="font-semibold text-foreground">
-                {filteredNotes.length}
-              </span>
-            </p>
+            <div>
+              <h2 className="text-xl font-semibold tracking-tight">
+                {feedMode === "following" ? "Following feed" : "Discover notes"}
+              </h2>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Showing{" "}
+                <span className="font-semibold text-foreground">
+                  {Math.min(shown, filteredNotes.length)}
+                </span>{" "}
+                of{" "}
+                <span className="font-semibold text-foreground">
+                  {filteredNotes.length}
+                </span>{" "}
+                notes
+              </p>
+            </div>
 
             <button
               type="button"
@@ -605,14 +670,33 @@ function Feed() {
                 {!filteredNotes.length && (
                   <div className="flex flex-col items-center rounded-3xl border border-dashed border-border py-16 text-center">
                     <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-muted text-muted-foreground">
-                      <FileText className="h-5 w-5" />
+                      {feedMode === "following" ? (
+                        <Users className="h-5 w-5" />
+                      ) : (
+                        <FileText className="h-5 w-5" />
+                      )}
                     </div>
 
-                    <p className="font-medium">Nothing here yet</p>
-
-                    <p className="mt-1 text-sm text-muted-foreground">
-                      Try loosening your filters to discover more notes.
+                    <p className="font-medium">
+                      {feedMode === "following"
+                        ? "No notes from followed users yet"
+                        : "Nothing here yet"}
                     </p>
+
+                    <p className="mt-1 max-w-sm text-sm text-muted-foreground">
+                      {feedMode === "following"
+                        ? "Follow other users to see their shared notes here."
+                        : "Try loosening your filters to discover more notes."}
+                    </p>
+
+                    {feedMode === "following" && (
+                      <Link
+                        to="/search"
+                        className="mt-5 rounded-full border border-border px-4 py-2 text-sm font-medium hover:bg-muted"
+                      >
+                        Find people to follow
+                      </Link>
+                    )}
 
                     {activeFilterCount > 0 && (
                       <button

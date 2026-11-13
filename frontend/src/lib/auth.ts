@@ -12,6 +12,10 @@ export async function getSessionUser(): Promise<SessionUser | null> {
   try {
     const { data } = await api.get("/accounts/me/");
     const loggedIn = Boolean(data.loggedIn ?? data.logedIn);
+
+    if (loggedIn && data.user) {
+      sessionStorage.setItem("sessionUser", JSON.stringify(data.user));
+    }
     return loggedIn ? (data.user as SessionUser) : null;
   } catch {
     return null;

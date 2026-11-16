@@ -12,4 +12,12 @@ export default defineConfig({
     // nitro/vite builds from this
     server: { entry: "server" },
   },
+  vite: {
+    server: {
+      allowedHosts: [
+	"suggestion-hub.prottoy.qzz.io",
+	"www.suggestion-hub.prottoy.qzz.io",
+      ],
+    },
+  },
 });

@@ -26,7 +26,8 @@ SECRET_KEY = 'django-insecure-p5++zx+uc6id*4a2+zy58aedxc2+ade$9*ojon=m5oz_81r%ez
 DEBUG = True
 
 ALLOWED_HOSTS = [
-    '*'
+    'suggestion-hub.prottoy.qzz.io',
+    '163.61.156.126',
 ]
 
 # CORS settings
@@ -34,6 +35,9 @@ CORS_ALLOWED_ORIGINS = [
     "http://localhost:8081",
     "http://127.0.0.1:8081",
     "http://192.168.1.138:8081",
+    "http://163.61.156.126:8081",
+    "https://suggestion-hub.prottoy.qzz.io",
+    "https://www.suggestion-hub.prottoy.qzz.io",
 ]
 CORS_ALLOW_CREDENTIALS = True
 
@@ -41,7 +45,10 @@ CORS_ALLOW_CREDENTIALS = True
 CSRF_TRUSTED_ORIGINS = [
     "http://localhost:8081",
     "http://127.0.0.1:8081",
-    "http://192.168.1.138:8081"
+    "http://192.168.1.138:8081",
+    "http://163.61.156.126:8081",
+    "https://suggestion-hub.prottoy.qzz.io",
+    "https://www.suggestion-hub.prottoy.qzz.io",
 ]
 
 

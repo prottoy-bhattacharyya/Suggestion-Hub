@@ -34,6 +34,10 @@ ALLOWED_HOSTS = [
     '127.0.0.1',
 ]
 
+# For build url to be HTTPS in pdf build URL
+SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+
+
 # CORS settings
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:8081",

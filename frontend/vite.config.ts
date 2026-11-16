@@ -15,8 +15,10 @@ export default defineConfig({
   vite: {
     server: {
       allowedHosts: [
-	"suggestion-hub.prottoy.qzz.io",
-	"www.suggestion-hub.prottoy.qzz.io",
+        "suggestion-hub.prottoy.qzz.io",
+        "www.suggestion-hub.prottoy.qzz.io",
+        "admin.suggestion-hub.prottoy.qzz.io",
+        "www.admin.suggestion-hub.prottoy.qzz.io",
       ],
     },
   },

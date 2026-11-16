@@ -11,7 +11,7 @@ uv run manage.py runserver 0.0.0.0:8000
 docker compose up --build
 docker compose up
 
-# If Docker compose shows error
+# If Docker compose shows error ( Windows )
 Copy-Item "C:\Program Files\Docker\Docker\resources\cli-plugins\docker-compose.exe" `
 "$env:USERPROFILE\.docker\cli-plugins\docker-compose.exe"
 

@@ -27,7 +27,11 @@ DEBUG = True
 
 ALLOWED_HOSTS = [
     'suggestion-hub.prottoy.qzz.io',
+    'www.suggestion-hub.prottoy.qzz.io',
+    'admin.prottoy.qzz.io',
     '163.61.156.126',
+    'localhost',
+    '127.0.0.1',
 ]
 
 # CORS settings
@@ -38,6 +42,7 @@ CORS_ALLOWED_ORIGINS = [
     "http://163.61.156.126:8081",
     "https://suggestion-hub.prottoy.qzz.io",
     "https://www.suggestion-hub.prottoy.qzz.io",
+    "https://admin.prottoy.qzz.io",
 ]
 CORS_ALLOW_CREDENTIALS = True
 
@@ -49,6 +54,7 @@ CSRF_TRUSTED_ORIGINS = [
     "http://163.61.156.126:8081",
     "https://suggestion-hub.prottoy.qzz.io",
     "https://www.suggestion-hub.prottoy.qzz.io",
+    "https://admin.prottoy.qzz.io",
 ]
 
 

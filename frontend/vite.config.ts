@@ -17,8 +17,7 @@ export default defineConfig({
       allowedHosts: [
         "suggestion-hub.prottoy.qzz.io",
         "www.suggestion-hub.prottoy.qzz.io",
-        "admin.suggestion-hub.prottoy.qzz.io",
-        "www.admin.suggestion-hub.prottoy.qzz.io",
+        "admin.prottoy.qzz.io",
       ],
     },
   },

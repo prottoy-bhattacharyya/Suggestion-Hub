@@ -21,6 +21,7 @@ import {
   Inbox,
   Files,
   Users,
+  Mail,
 } from "lucide-react";
 
 import { NoteCard, type Note as PdfCardNote } from "@/components/PdfCard";
@@ -396,8 +397,17 @@ function Profile() {
     .slice(0, 2)
     .toUpperCase();
 
-  const details = (
-    isTeacher
+  const details = [
+    ...(user.email
+      ? [
+          {
+            icon: Mail,
+            label: "Email",
+            value: user.email,
+          },
+        ]
+      : []),
+    ...(isTeacher
       ? [
           {
             icon: Briefcase,
@@ -427,7 +437,8 @@ function Profile() {
             value: user.section,
           },
         ]
-  ).filter((detail) => detail.value);
+    ),
+  ].filter((detail) => detail.value);
 
   const tabs = [
     {

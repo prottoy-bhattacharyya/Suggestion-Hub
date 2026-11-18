@@ -267,8 +267,7 @@ def profile(request, user_id):
     # Hide other users' email; only the session owner sees their own.
     session_user = request.session.get('user')
     is_owner = bool(session_user) and session_user.get("id") == user_id
-    if not is_owner:
-        user.pop("email")
+
 
     return JsonResponse(
         {

@@ -134,6 +134,35 @@ def is_following(request):
     finally:
         conn.close()
 
+
+def unfollow(request, user_id):
+    session_user = request.session.get('user')
+    user_id = int(user_id)
+    if not session_user:
+        return JsonResponse(
+            {"status": "failed", "error": "You need to login first."},
+            status=401,
+        )
+
+    follower_id = session_user.get("id")
+
+    conn = get_db_connection()
+    try:
+        with conn.cursor() as cursor:
+            cursor.execute(
+                """
+                DELETE FROM follows
+                WHERE follower_id = %s AND following_id = %s
+                """,
+                (follower_id, user_id),
+            )
+            conn.commit()
+
+        return JsonResponse({"status": "success", "message": "Unfollowed."})
+    finally:
+        conn.close()
+
+
 @csrf_exempt
 def comments(request):
     session_user = request.session.get('user')
@@ -199,3 +228,116 @@ def comments(request):
             conn.commit()
 
         return JsonResponse({"status": "success", "message": "Comment added."})
+
+
+def my_followers(request):
+    session_user = request.session.get('user')
+    if not session_user:
+        return JsonResponse(
+            {"status": "failed", "error": "You need to login first."},
+            status=401,
+        )
+
+    user_id = session_user.get("id")
+
+    conn = get_db_connection()
+    try:
+        with conn.cursor(dictionary=True) as cursor:
+            cursor.execute(
+                """
+                SELECT u.id, u.full_name, u.role
+                FROM follows f
+                JOIN users u ON f.follower_id = u.id
+                WHERE f.following_id = %s
+                """,
+                (user_id,),
+            )
+            followers = cursor.fetchall()
+
+        return JsonResponse({"status": "success", "followers": followers})
+    finally:
+        conn.close()
+
+
+def my_following(request):
+    session_user = request.session.get('user')
+    if not session_user:
+        return JsonResponse(
+            {"status": "failed", "error": "You need to login first."},
+            status=401,
+        )
+
+    user_id = session_user.get("id")
+
+    conn = get_db_connection()
+    try:
+        with conn.cursor(dictionary=True) as cursor:
+            cursor.execute(
+                """
+                SELECT u.id, u.full_name, u.role
+                FROM follows f
+                JOIN users u ON f.following_id = u.id
+                WHERE f.follower_id = %s
+                """,
+                (user_id,),
+            )
+            following = cursor.fetchall()
+
+        return JsonResponse({"status": "success", "following": following})
+    finally:
+        conn.close()
+
+
+def followers(request, user_id):
+    if request.method != "GET":
+        return JsonResponse(
+            {"status": "failed", "error": "Invalid request method."},
+            status=405,
+        )
+
+    conn = get_db_connection()
+    try:
+        with conn.cursor(dictionary=True) as cursor:
+            cursor.execute(
+                """
+                SELECT u.id, u.full_name, u.role
+                FROM follows f
+                JOIN users u ON f.follower_id = u.id
+                WHERE f.following_id = %s
+                ORDER BY u.full_name
+                """,
+                (user_id,),
+            )
+            followers = cursor.fetchall()
+
+        return JsonResponse({"status": "success", "followers": followers})
+    finally:
+        conn.close()
+
+
+def following(request, user_id):
+    if request.method != "GET":
+        return JsonResponse(
+            {"status": "failed", "error": "Invalid request method."},
+            status=405,
+        )
+
+    conn = get_db_connection()
+    try:
+        with conn.cursor(dictionary=True) as cursor:
+            cursor.execute(
+                """
+                SELECT u.id, u.full_name, u.role
+                FROM follows f
+                JOIN users u ON f.following_id = u.id
+                WHERE f.follower_id = %s
+                ORDER BY u.full_name
+                """,
+                (user_id,),
+            )
+            following = cursor.fetchall()
+
+        return JsonResponse({"status": "success", "following": following})
+    finally:
+        conn.close()
+

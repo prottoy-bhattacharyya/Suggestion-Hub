@@ -26,6 +26,13 @@ import {
 import { NoteCard, type Note as PdfCardNote } from "@/components/PdfCard";
 
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import api from "@/lib/api";
 import { getSessionUser } from "@/lib/auth";
 import { getCSRFToken } from "@/lib/utils";
@@ -66,6 +73,18 @@ type ProfileNote = PdfCardNote & {
 type NotesResponse = {
   status: string;
   notes: ProfileNote[];
+};
+
+type FollowProfile = {
+  id: number;
+  full_name: string;
+  role: string;
+};
+
+type FollowListResponse = {
+  status: string;
+  followers?: FollowProfile[];
+  following?: FollowProfile[];
 };
 
 export const Route = createFileRoute("/profile/$id")({
@@ -134,6 +153,12 @@ function Profile() {
   const [followLoading, setFollowLoading] = useState(false);
   const [followChecking, setFollowChecking] = useState(!isMe);
   const [followError, setFollowError] = useState("");
+  const [followListOpen, setFollowListOpen] = useState<"followers" | "following" | null>(null);
+  const [followList, setFollowList] = useState<FollowProfile[]>([]);
+  const [followListLoading, setFollowListLoading] = useState(false);
+  const [followListError, setFollowListError] = useState("");
+  const [followingCount, setFollowingCount] = useState(profile.following);
+  const [unfollowPendingId, setUnfollowPendingId] = useState<number | null>(null);
 
   const [notes, setNotes] = useState<ProfileNote[]>([]);
   const [notesLoading, setNotesLoading] = useState(true);
@@ -142,6 +167,20 @@ function Profile() {
   const [tab, setTab] = useState<"approved" | "pending" | "rejected">(
     "approved",
   );
+
+  useEffect(() => {
+    setFollowersCount(profile.followers);
+    setFollowingCount(profile.following);
+    setFollow(false);
+    setFollowChecking(!isMe);
+    setFollowError("");
+    setFollowLoading(false);
+    setFollowListOpen(null);
+    setFollowList([]);
+    setFollowListError("");
+    setUnfollowPendingId(null);
+    setTab("approved");
+  }, [profile.followers, profile.following, user.id, isMe]);
 
   // Fetch notes belonging to this profile.
   useEffect(() => {
@@ -267,7 +306,7 @@ function Profile() {
 
       const { data } = await api.post<FollowStatusResponse>(
         `/social/follow/${user.id}/`,
-        {},
+        { action: follow ? "unfollow" : "follow" },
       );
 
       if (data.status === "success") {
@@ -286,6 +325,65 @@ function Profile() {
       setFollowError("Unable to update follow status. Please try again.");
     } finally {
       setFollowLoading(false);
+    }
+  }
+
+  async function openFollowList(type: "followers" | "following") {
+    setFollowListOpen(type);
+    setFollowList([]);
+    setFollowListLoading(true);
+    setFollowListError("");
+
+    try {
+      const endpoint =
+        type === "followers"
+          ? `/social/followers/${user.id}/`
+          : `/social/following/${user.id}/`;
+      const { data } = await api.get<FollowListResponse>(endpoint);
+
+      if (data.status === "success") {
+        setFollowList(type === "followers" ? data.followers ?? [] : data.following ?? []);
+      } else {
+        setFollowListError(`Unable to load ${type}.`);
+      }
+    } catch (error) {
+      console.error(`Could not load ${type}:`, error);
+      setFollowListError(`Unable to load ${type}. Please try again.`);
+    } finally {
+      setFollowListLoading(false);
+    }
+  }
+
+  async function handleUnfollow(personId: number) {
+    if (unfollowPendingId !== null) return;
+
+    setUnfollowPendingId(personId);
+
+    try {
+      const csrfToken = await getCSRFToken();
+      const { data } = await api.post(
+        `/social/follow/${personId}/`,
+        { action: "unfollow" },
+        {
+          headers: {
+            "Content-Type": "application/json",
+            Accept: "application/json",
+            ...(csrfToken ? { "X-CSRFToken": csrfToken } : {}),
+          },
+        },
+      );
+
+      if (data.status === "success" && data.is_following === false) {
+        setFollowList((people) => people.filter((person) => person.id !== personId));
+        setFollowingCount((count) => Math.max(0, count - 1));
+      } else {
+        setFollowListError("Unable to unfollow this person.");
+      }
+    } catch (error) {
+      console.error("Could not unfollow user:", error);
+      setFollowListError("Unable to unfollow this person.");
+    } finally {
+      setUnfollowPendingId(null);
     }
   }
 
@@ -476,19 +574,125 @@ function Profile() {
           {[
             { label: "Uploads", value: totalUploads, Icon: Files },
             { label: "Followers", value: followersCount, Icon: Users },
-            { label: "Following", value: profile.following, Icon: UserCheck },
+            { label: "Following", value: followingCount, Icon: UserCheck },
           ].map(({ label, value, Icon }, index) => (
             <div key={label} className={index === 0 ? "pr-3" : "px-3 sm:px-6"}>
-              <dt className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                <Icon className="hidden size-3.5 sm:block" aria-hidden="true" />
-                {label}
-              </dt>
-              <dd className="mt-2 text-2xl font-semibold tabular-nums sm:text-3xl">
-                {label === "Uploads" && notesLoading ? "—" : value}
-              </dd>
+              {label === "Uploads" ? (
+                <>
+                  <dt className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                    <Icon className="hidden size-3.5 sm:block" aria-hidden="true" />
+                    {label}
+                  </dt>
+                  <dd className="mt-2 text-2xl font-semibold tabular-nums sm:text-3xl">
+                    {notesLoading ? "—" : value}
+                  </dd>
+                </>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => openFollowList(label.toLowerCase() as "followers" | "following")}
+                  className="block text-left"
+                  aria-label={`View ${label.toLowerCase()}`}
+                >
+                  <dt className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                    <Icon className="hidden size-3.5 sm:block" aria-hidden="true" />
+                    {label}
+                  </dt>
+                  <dd className="mt-2 text-2xl font-semibold tabular-nums transition-colors hover:text-primary sm:text-3xl">
+                    {value}
+                  </dd>
+                </button>
+              )}
             </div>
           ))}
         </dl>
+
+        <Dialog
+          open={followListOpen !== null}
+          onOpenChange={(open) => {
+            if (!open) {
+              setFollowListOpen(null);
+              setFollowList([]);
+              setFollowListError("");
+            }
+          }}
+        >
+          <DialogContent className="max-h-[80vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>
+                {followListOpen === "followers" ? "Followers" : "Following"}
+              </DialogTitle>
+              <DialogDescription>
+                {followListOpen === "followers"
+                  ? `People following ${user.full_name}`
+                  : `People ${user.full_name} follows`}
+              </DialogDescription>
+            </DialogHeader>
+
+            {followListLoading ? (
+              <div className="flex items-center justify-center py-8">
+                <LoaderCircle className="size-6 animate-spin text-primary" aria-label="Loading" />
+              </div>
+            ) : followListError ? (
+              <p role="alert" className="rounded-md bg-destructive/5 px-4 py-3 text-sm text-destructive">
+                {followListError}
+              </p>
+            ) : followList.length === 0 ? (
+              <p className="py-6 text-center text-sm text-muted-foreground">
+                No users found.
+              </p>
+            ) : (
+              <ul className="divide-y divide-border">
+                {followList.map((person) => {
+                  const personInitials = person.full_name
+                    .split(" ")
+                    .map((word) => word[0])
+                    .join("")
+                    .slice(0, 2)
+                    .toUpperCase();
+
+                  return (
+                    <li key={person.id}>
+                      <div className="flex items-center gap-2 py-2">
+                        <Link
+                          to="/profile/$id"
+                          params={{ id: String(person.id) }}
+                          onClick={() => setFollowListOpen(null)}
+                          className="flex min-w-0 flex-1 items-center gap-3 rounded-md px-2 py-1 transition-colors hover:bg-muted"
+                        >
+                          <span className="grid size-10 shrink-0 place-items-center rounded-full bg-primary text-sm font-semibold text-primary-foreground">
+                            {personInitials}
+                          </span>
+                          <span className="min-w-0">
+                            <span className="block truncate font-semibold">{person.full_name}</span>
+                            <span className="block text-xs capitalize text-muted-foreground">{person.role}</span>
+                          </span>
+                        </Link>
+                        {isMe && followListOpen === "following" && (
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            disabled={unfollowPendingId === person.id}
+                            onClick={() => handleUnfollow(person.id)}
+                            className="shrink-0"
+                          >
+                            {unfollowPendingId === person.id ? (
+                              <LoaderCircle className="size-4 animate-spin" aria-hidden="true" />
+                            ) : (
+                              <UserCheck className="size-4" aria-hidden="true" />
+                            )}
+                            Unfollow
+                          </Button>
+                        )}
+                      </div>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </DialogContent>
+        </Dialog>
       </section>
 
       <div className="grid gap-10 pt-8 lg:grid-cols-[240px_minmax(0,1fr)] lg:gap-12 lg:pt-10">

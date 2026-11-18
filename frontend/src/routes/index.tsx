@@ -455,7 +455,7 @@ function Index() {
               {/* Replace these placeholder URLs with your real profiles */}
               <div className="mt-5 flex items-center gap-3">
                 <a
-                  href="https://github.com/your-username"
+                  href="https://github.com/prottoy-bhattacharyya"
                   target="_blank"
                   rel="noreferrer"
                   aria-label="GitHub"
@@ -485,7 +485,7 @@ function Index() {
                   <Instagram size={19} />
                 </a>
                 <a
-                  href="https://linkedin.com/in/your-profile"
+                  href="https://www.linkedin.com/in/prottoy-bhattacharya-4262aa286"
                   target="_blank"
                   rel="noreferrer"
                   aria-label="LinkedIn"

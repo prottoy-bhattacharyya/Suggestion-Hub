@@ -19,13 +19,13 @@ import {
   UserPlus,
   UserCheck,
   Inbox,
+  Files,
+  Users,
 } from "lucide-react";
 
-import {
-  NoteCard,
-  type Note as PdfCardNote,
-} from "@/components/PdfCard";
+import { NoteCard, type Note as PdfCardNote } from "@/components/PdfCard";
 
+import { Button } from "@/components/ui/button";
 import api from "@/lib/api";
 import { getSessionUser } from "@/lib/auth";
 import { getCSRFToken } from "@/lib/utils";
@@ -74,8 +74,17 @@ export const Route = createFileRoute("/profile/$id")({
       { title: "Profile — Suggestion Hub" },
       {
         name: "description",
-        content: "Uploads, followers and following.",
+        content:
+          "Explore academic profiles, published notes, and course contributions on Suggestion Hub.",
       },
+      { property: "og:title", content: "Profile — Suggestion Hub" },
+      {
+        property: "og:description",
+        content:
+          "Explore academic profiles, published notes, and course contributions on Suggestion Hub.",
+      },
+      { property: "og:type", content: "profile" },
+      { name: "twitter:card", content: "summary_large_image" },
     ],
   }),
 
@@ -118,8 +127,7 @@ function Profile() {
   const isMe = profile.is_owner;
 
   const role = user.role?.toLowerCase() ?? "";
-  const isTeacher =
-    role.includes("teacher") || role.includes("faculty");
+  const isTeacher = role.includes("teacher") || role.includes("faculty");
 
   const [follow, setFollow] = useState(false);
   const [followersCount, setFollowersCount] = useState(profile.followers);
@@ -131,9 +139,9 @@ function Profile() {
   const [notesLoading, setNotesLoading] = useState(true);
   const [notesError, setNotesError] = useState("");
 
-  const [tab, setTab] = useState<
-    "approved" | "pending" | "rejected"
-  >("approved");
+  const [tab, setTab] = useState<"approved" | "pending" | "rejected">(
+    "approved",
+  );
 
   // Fetch notes belonging to this profile.
   useEffect(() => {
@@ -144,14 +152,11 @@ function Profile() {
       setNotesError("");
 
       try {
-        const { data } = await api.get<NotesResponse>(
-          "/notes/get_notes/",
-          {
-            params: {
-              user_id: user.id,
-            },
+        const { data } = await api.get<NotesResponse>("/notes/get_notes/", {
+          params: {
+            user_id: user.id,
           },
-        );
+        });
 
         if (!cancelled) {
           if (data.status === "success") {
@@ -159,9 +164,7 @@ function Profile() {
             // Visitors can only see approved uploads.
             const visibleNotes = isMe
               ? data.notes
-              : data.notes.filter(
-                  (note) => note.review_status === "approved",
-                );
+              : data.notes.filter((note) => note.review_status === "approved");
 
             setNotes(visibleNotes);
           } else {
@@ -172,9 +175,7 @@ function Profile() {
         console.error("Notes loading failed:", error);
 
         if (!cancelled) {
-          setNotesError(
-            "Unable to load uploads. Please try again.",
-          );
+          setNotesError("Unable to load uploads. Please try again.");
         }
       } finally {
         if (!cancelled) {
@@ -236,9 +237,7 @@ function Profile() {
         console.error("Could not check follow status:", error);
 
         if (!cancelled) {
-          setFollowError(
-            "Could not load follow status. Please try again.",
-          );
+          setFollowError("Could not load follow status. Please try again.");
         }
       } finally {
         if (!cancelled) {
@@ -276,30 +275,21 @@ function Profile() {
 
         if (data.is_following !== previousFollow) {
           setFollowersCount((previous) =>
-            Math.max(
-              0,
-              previous + (data.is_following ? 1 : -1),
-            ),
+            Math.max(0, previous + (data.is_following ? 1 : -1)),
           );
         }
       } else {
-        setFollowError(
-          "Unable to update follow status. Please try again.",
-        );
+        setFollowError("Unable to update follow status. Please try again.");
       }
     } catch (error) {
       console.error("Follow request failed:", error);
-      setFollowError(
-        "Unable to update follow status. Please try again.",
-      );
+      setFollowError("Unable to update follow status. Please try again.");
     } finally {
       setFollowLoading(false);
     }
   }
 
-  const totalUploads = isMe
-    ? notes.length
-    : approvedNotes.length;
+  const totalUploads = isMe ? notes.length : approvedNotes.length;
 
   const initials = user.full_name
     .split(" ")
@@ -377,223 +367,242 @@ function Profile() {
     },
     rejected: {
       title: "Not approved",
-      description:
-        "Check the reason on each note before re-uploading.",
+      description: "Check the reason on each note before re-uploading.",
       notes: rejectedNotes,
       emptyMessage: "No rejected notes — nice work.",
     },
   }[isMe ? tab : "approved"];
 
   return (
-    <div className="mx-auto max-w-5xl px-4 py-10 sm:px-6 lg:py-14">
-      <Link
-        to="/feeds"
-        className="mb-6 inline-flex items-center gap-1.5 text-sm text-muted-foreground transition-colors hover:text-foreground"
+    <main className="mx-auto max-w-7xl px-4 py-6 sm:px-8 sm:py-10">
+      <div className="mb-8 flex items-center justify-between border-b border-border pb-4">
+        <Button
+          asChild
+          variant="ghost"
+          size="sm"
+          className="-ml-3 text-muted-foreground"
+        >
+          <Link to="/feeds">
+            <ArrowLeft aria-hidden="true" />
+            Back to feed
+          </Link>
+        </Button>
+        <span className="text-xs font-medium text-muted-foreground">
+          Suggestion Hub / Profile
+        </span>
+      </div>
+
+      {/* Editorial identity header: no decorative banner or floating container. */}
+      <section
+        aria-labelledby="profile-name"
+        className="border-b border-border pb-8 sm:pb-10"
       >
-        <ArrowLeft className="h-4 w-4" />
-        Back to feed
-      </Link>
-
-      {/* Profile hero */}
-      <section className="relative overflow-hidden rounded-3xl border border-border/60 bg-card shadow-xl shadow-primary/5">
-        <div className="relative h-32 bg-gradient-to-br from-primary/25 via-primary/10 to-transparent sm:h-40">
-          <div className="pointer-events-none absolute -right-16 -top-16 h-56 w-56 rounded-full bg-primary/20 blur-3xl" />
-          <div className="pointer-events-none absolute bottom-0 left-1/3 h-32 w-32 rounded-full bg-primary/10 blur-2xl" />
-        </div>
-
-        <div className="relative px-6 pb-8 sm:px-10">
-          <div className="-mt-12 flex flex-wrap items-end justify-between gap-4 sm:-mt-14">
-            <div className="grid h-24 w-24 place-items-center rounded-3xl bg-primary font-display text-3xl text-primary-foreground shadow-2xl shadow-primary/30 ring-4 ring-card sm:h-28 sm:w-28 sm:text-4xl">
-              {initials}
-            </div>
-
-            {!isMe && (
-              <button
-                type="button"
-                onClick={handleFollowChange}
-                disabled={followLoading || followChecking}
-                className={`inline-flex items-center gap-2 rounded-full px-6 py-2.5 text-sm font-medium transition-all disabled:opacity-50 ${
-                  follow
-                    ? "border border-border bg-background text-foreground hover:bg-muted"
-                    : "bg-primary text-primary-foreground shadow-lg shadow-primary/25 hover:-translate-y-0.5"
-                }`}
-              >
-                {followChecking || followLoading ? (
-                  <LoaderCircle className="h-4 w-4 animate-spin" />
-                ) : follow ? (
-                  <UserCheck className="h-4 w-4" />
-                ) : (
-                  <UserPlus className="h-4 w-4" />
-                )}
-
-                {followChecking
-                  ? "Checking"
-                  : followLoading
-                    ? "Please wait"
-                    : follow
-                      ? "Following"
-                      : "Follow"}
-              </button>
-            )}
+        <div className="flex flex-col gap-6 sm:flex-row sm:items-center sm:gap-7">
+          <div
+            aria-hidden="true"
+            className="grid size-24 shrink-0 place-items-center rounded-lg border border-primary/20 bg-primary/10 font-display text-4xl font-semibold text-primary sm:size-28"
+          >
+            {initials || "?"}
           </div>
-
-          <div className="mt-5">
-            <div className="flex flex-wrap items-center gap-2">
-              <h1 className="text-3xl font-semibold tracking-tight sm:text-4xl">
+          <div className="min-w-0 flex-1">
+            <div className="mb-3 flex flex-wrap items-center gap-2 text-xs font-medium text-muted-foreground">
+              <GraduationCap
+                className="size-4 text-primary"
+                aria-hidden="true"
+              />
+              <span>{isTeacher ? "Faculty" : "Student"}</span>
+              {user.department_name && (
+                <>
+                  <span aria-hidden="true">·</span>
+                  <span className="break-words">{user.department_name}</span>
+                </>
+              )}
+            </div>
+            <div className="flex items-start gap-3">
+              <h1
+                id="profile-name"
+                className="min-w-0 break-words font-display text-3xl font-semibold leading-tight sm:text-4xl lg:text-5xl"
+              >
                 {user.full_name}
               </h1>
-
               {isTeacher && (
-                <BadgeCheck className="h-6 w-6 text-primary" />
-              )}
-            </div>
-
-            <div className="mt-2 flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
-              <span className="rounded-full border border-primary/20 bg-primary/5 px-3 py-0.5 text-[11px] font-semibold uppercase tracking-[0.14em] text-primary">
-                {isTeacher ? "Faculty" : "Student"}
-              </span>
-
-              {user.department_name && (
-                <span>{user.department_name}</span>
+                <BadgeCheck
+                  aria-label="Faculty profile"
+                  className="mt-1 size-6 shrink-0 text-primary sm:size-7"
+                />
               )}
             </div>
           </div>
-
-          {details.length > 0 && (
-            <dl className="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-3">
-              {details.map(({ icon: Icon, label, value }) => (
-                <div
-                  key={label}
-                  className="flex items-center gap-3 rounded-2xl border border-border/60 bg-background/60 px-4 py-3"
-                >
-                  <div className="grid h-9 w-9 place-items-center rounded-xl bg-primary/10 text-primary">
-                    <Icon className="h-4 w-4" />
-                  </div>
-
-                  <div className="min-w-0">
-                    <dt className="text-[10px] uppercase tracking-[0.14em] text-muted-foreground">
-                      {label}
-                    </dt>
-                    <dd className="truncate text-sm font-medium">
-                      {value}
-                    </dd>
-                  </div>
-                </div>
-              ))}
-            </dl>
-          )}
-
-          {profile.courses.length > 0 && (
-            <div className="mt-5 flex flex-wrap gap-1.5">
-              {profile.courses.map((course) => (
-                <span
-                  key={course}
-                  className="rounded-full border border-border bg-background px-3 py-1 text-xs font-medium"
-                >
-                  {course}
-                </span>
-              ))}
-            </div>
-          )}
-
-          {/* Stats */}
-          <div className="mt-8 grid grid-cols-3 divide-x divide-border/60 rounded-2xl border border-border/60 bg-background/60">
-            {[
-              { label: "Uploads", value: totalUploads },
-              { label: "Followers", value: followersCount },
-              { label: "Following", value: profile.following },
-            ].map((stat) => (
-              <div
-                key={stat.label}
-                className="px-4 py-4 text-center"
-              >
-                <p className="font-display text-2xl font-semibold tabular-nums sm:text-3xl">
-                  {stat.value}
-                </p>
-                <p className="mt-1 text-[11px] uppercase tracking-[0.14em] text-muted-foreground">
-                  {stat.label}
-                </p>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {followError && !isMe && (
-        <p
-          className="mt-4 rounded-2xl border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive"
-          role="alert"
-        >
-          {followError}
-        </p>
-      )}
-
-      {/* Uploads */}
-      <section className="mt-12">
-        <div className="flex flex-wrap items-end justify-between gap-4">
-          <h2 className="text-2xl font-semibold tracking-tight">
-            {isMe ? "My uploads" : "Uploads"}
-          </h2>
-
-          {isMe && !notesLoading && !notesError && (
-            <div className="inline-flex flex-wrap gap-1 rounded-full bg-muted p-1">
-              {tabs.map(({ key, label, count, Icon }) => (
-                <button
-                  key={key}
-                  type="button"
-                  aria-pressed={tab === key}
-                  onClick={() => setTab(key)}
-                  className={`inline-flex items-center gap-1.5 rounded-full px-4 py-1.5 text-xs font-medium transition-all ${
-                    tab === key
-                      ? "bg-background text-foreground shadow-sm"
-                      : "text-muted-foreground hover:text-foreground"
-                  }`}
-                >
-                  <Icon className="h-3.5 w-3.5" />
-                  {label}
-                  <span className="tabular-nums opacity-60">
-                    {count}
-                  </span>
-                </button>
-              ))}
-            </div>
+          {!isMe && (
+            <Button
+              type="button"
+              size="lg"
+              variant={follow ? "outline" : "default"}
+              onClick={handleFollowChange}
+              disabled={followLoading || followChecking}
+              aria-pressed={follow}
+              className="w-full shrink-0 sm:w-auto"
+            >
+              {followChecking || followLoading ? (
+                <LoaderCircle
+                  className="animate-spin motion-reduce:animate-none"
+                  aria-hidden="true"
+                />
+              ) : follow ? (
+                <UserCheck aria-hidden="true" />
+              ) : (
+                <UserPlus aria-hidden="true" />
+              )}
+              {followChecking
+                ? "Checking"
+                : followLoading
+                  ? "Please wait"
+                  : follow
+                    ? "Following"
+                    : "Follow"}
+            </Button>
           )}
         </div>
-
-        {notesLoading && (
-          <div className="mt-6 space-y-3">
-            {Array.from({ length: 3 }).map((_, i) => (
-              <div
-                key={i}
-                className="animate-pulse rounded-2xl border border-border/60 bg-card p-6"
-              >
-                <div className="flex gap-4">
-                  <div className="h-14 w-11 rounded-lg bg-muted" />
-                  <div className="flex-1 space-y-2">
-                    <div className="h-4 w-1/3 rounded bg-muted" />
-                    <div className="h-3 w-2/3 rounded bg-muted" />
-                    <div className="h-3 w-1/2 rounded bg-muted" />
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-
-        {!notesLoading && notesError && (
-          <p className="mt-6 rounded-2xl border border-destructive/30 bg-destructive/5 p-4 text-center text-sm text-destructive">
-            {notesError}
+        {followError && !isMe && (
+          <p
+            role="alert"
+            className="mt-5 border-l-2 border-destructive bg-destructive/5 px-4 py-3 text-sm text-destructive"
+          >
+            {followError}
           </p>
         )}
 
-        {!notesLoading && !notesError && (
-          <NotesSection
-            {...sectionProps}
-            showStatus={isMe}
-          />
-        )}
+        <dl className="mt-8 grid grid-cols-3 divide-x divide-border border-t border-border pt-6 sm:ml-35 sm:max-w-xl">
+          {[
+            { label: "Uploads", value: totalUploads, Icon: Files },
+            { label: "Followers", value: followersCount, Icon: Users },
+            { label: "Following", value: profile.following, Icon: UserCheck },
+          ].map(({ label, value, Icon }, index) => (
+            <div key={label} className={index === 0 ? "pr-3" : "px-3 sm:px-6"}>
+              <dt className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                <Icon className="hidden size-3.5 sm:block" aria-hidden="true" />
+                {label}
+              </dt>
+              <dd className="mt-2 text-2xl font-semibold tabular-nums sm:text-3xl">
+                {label === "Uploads" && notesLoading ? "—" : value}
+              </dd>
+            </div>
+          ))}
+        </dl>
       </section>
-    </div>
+
+      <div className="grid gap-10 pt-8 lg:grid-cols-[240px_minmax(0,1fr)] lg:gap-12 lg:pt-10">
+        <aside
+          className="space-y-8 lg:border-r lg:border-border lg:pr-8"
+          aria-label="Academic profile"
+        >
+          <section>
+            <h2 className="mb-5 text-sm font-semibold">Academic details</h2>
+            {details.length > 0 ? (
+              <dl className="grid gap-5 sm:grid-cols-3 lg:grid-cols-1">
+                {details.map(({ icon: Icon, label, value }) => (
+                  <div key={label} className="flex items-start gap-3">
+                    <Icon
+                      className="mt-0.5 size-4 shrink-0 text-muted-foreground"
+                      aria-hidden="true"
+                    />
+                    <div className="min-w-0">
+                      <dt className="text-xs text-muted-foreground">{label}</dt>
+                      <dd className="mt-1 break-words text-sm font-medium">
+                        {value}
+                      </dd>
+                    </div>
+                  </div>
+                ))}
+              </dl>
+            ) : (
+              <p className="text-sm text-muted-foreground">
+                No academic details added.
+              </p>
+            )}
+          </section>
+        </aside>
+
+        <section aria-labelledby="uploads-title" className="min-w-0">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <h2
+              id="uploads-title"
+              className="font-display text-2xl font-semibold"
+            >
+              {isMe ? "My uploads" : "Published uploads"}
+            </h2>
+            {!notesLoading && !notesError && (
+              <span className="text-xs text-muted-foreground">
+                {sectionProps.notes.length}{" "}
+                {sectionProps.notes.length === 1 ? "upload" : "uploads"}
+              </span>
+            )}
+          </div>
+
+          {isMe && !notesLoading && !notesError && (
+            <div
+              className="mt-5 flex flex-wrap gap-1 border-b border-border pb-2"
+              role="group"
+              aria-label="Upload review status"
+            >
+              {tabs.map(({ key, label, count, Icon }) => (
+                <Button
+                  key={key}
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  aria-pressed={tab === key}
+                  onClick={() => setTab(key)}
+                  className={
+                    tab === key
+                      ? "bg-accent text-accent-foreground"
+                      : "text-muted-foreground"
+                  }
+                >
+                  <Icon aria-hidden="true" />
+                  {label}
+                  <span className="ml-1 tabular-nums opacity-70">{count}</span>
+                </Button>
+              ))}
+            </div>
+          )}
+
+          {notesLoading && (
+            <div
+              role="status"
+              aria-label="Loading uploads"
+              className="mt-6 space-y-4"
+            >
+              {Array.from({ length: 3 }).map((_, index) => (
+                <div
+                  key={index}
+                  aria-hidden="true"
+                  className="flex gap-4 rounded-lg border border-border p-5 motion-safe:animate-pulse"
+                >
+                  <div className="h-16 w-12 shrink-0 rounded-md bg-muted" />
+                  <div className="flex-1 space-y-3">
+                    <div className="h-4 w-2/3 rounded bg-muted" />
+                    <div className="h-3 w-1/3 rounded bg-muted" />
+                    <div className="h-3 w-1/2 rounded bg-muted" />
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+          {!notesLoading && notesError && (
+            <p
+              role="alert"
+              className="mt-6 border-l-2 border-destructive bg-destructive/5 p-4 text-sm text-destructive"
+            >
+              {notesError}
+            </p>
+          )}
+          {!notesLoading && !notesError && (
+            <NotesSection {...sectionProps} showStatus={isMe} />
+          )}
+        </section>
+      </div>
+    </main>
   );
 }
 
@@ -612,90 +621,84 @@ function NotesSection({
 }) {
   return (
     <div className="mt-6">
-      <div className="mb-4">
-        <h3 className="text-sm font-semibold">{title}</h3>
-        <p className="text-sm text-muted-foreground">
-          {description}
-        </p>
-      </div>
-
-      {notes.length === 0 ? (
-        <div className="flex flex-col items-center rounded-3xl border border-dashed border-border py-14 text-center">
-          <div className="mb-3 grid h-12 w-12 place-items-center rounded-2xl bg-muted text-muted-foreground">
-            <Inbox className="h-5 w-5" />
-          </div>
-          <p className="text-sm text-muted-foreground">
-            {emptyMessage}
+      {showStatus && (
+        <div className="mb-5">
+          <h3 className="text-sm font-medium">{title}</h3>
+          <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+            {description}
           </p>
         </div>
+      )}
+      {notes.length === 0 ? (
+        <div className="flex min-h-56 flex-col items-center justify-center border-y border-dashed border-border px-4 text-center">
+          <Inbox
+            className="mb-4 size-8 text-muted-foreground"
+            strokeWidth={1.25}
+            aria-hidden="true"
+          />
+          <p className="text-sm font-medium">{emptyMessage}</p>
+        </div>
       ) : (
-        <div className="space-y-4">
-          {notes.map((note, i) => {
+        <div className="space-y-6">
+          {notes.map((note) => {
             const statusConfig = {
               pending: {
                 label: "Pending review",
-                className: "bg-highlight/25 text-foreground",
+                className: "bg-secondary text-secondary-foreground",
                 Icon: Clock,
               },
               approved: {
                 label: "Approved",
-                className: "bg-success/15 text-success",
+                className: "bg-accent text-accent-foreground",
                 Icon: CheckCircle2,
               },
               rejected: {
                 label: "Rejected",
-                className: "bg-destructive/15 text-destructive",
+                className: "bg-destructive/10 text-destructive",
                 Icon: XCircle,
               },
             }[note.review_status];
-
             const rejectionReason =
               note.review_comment ||
               note.review_reason ||
               note.rejection_reason;
-
-            // The shared PdfCard Note type requires course_code.
-            // Some profile API responses may not include it.
             const cardNote: PdfCardNote = {
               ...note,
               course_code: note.course_code ?? "",
             };
-
             return (
-              <div
-                key={note.id}
-                className="animate-in fade-in slide-in-from-bottom-2 fill-mode-both"
-                style={{
-                  animationDelay: `${Math.min(i, 6) * 50}ms`,
-                }}
-              >
+              <div key={note.id}>
                 {showStatus && (
-                  <div className="mb-2 flex flex-wrap items-center gap-2">
+                  <div className="mb-2 flex items-center justify-between gap-3">
                     <span
-                      className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium ${statusConfig.className}`}
+                      className={`inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-xs font-medium ${statusConfig.className}`}
                     >
-                      <statusConfig.Icon className="h-3.5 w-3.5" />
+                      <statusConfig.Icon
+                        className="size-3.5"
+                        aria-hidden="true"
+                      />
                       {statusConfig.label}
                     </span>
+                    {note.course_code && (
+                      <span className="text-xs text-muted-foreground">
+                        {note.course_code}
+                      </span>
+                    )}
                   </div>
                 )}
-
                 <NoteCard note={cardNote} />
-
-                {showStatus &&
-                  note.review_status === "rejected" && (
-                    <div className="mt-2 rounded-xl border border-destructive/30 bg-destructive/5 p-3">
-                      <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.12em] text-destructive">
-                        <XCircle className="h-3.5 w-3.5" />
-                        Rejection reason
-                      </div>
-
-                      <p className="mt-1 text-sm text-foreground">
-                        {rejectionReason ||
-                          "No rejection reason was provided by the administrator."}
-                      </p>
-                    </div>
-                  )}
+                {showStatus && note.review_status === "rejected" && (
+                  <div className="mt-3 border-l-2 border-destructive bg-destructive/5 px-4 py-3">
+                    <p className="flex items-center gap-2 text-xs font-semibold text-destructive">
+                      <XCircle className="size-3.5" aria-hidden="true" />
+                      Rejection reason
+                    </p>
+                    <p className="mt-2 break-words text-sm leading-relaxed">
+                      {rejectionReason ||
+                        "No rejection reason was provided by the administrator."}
+                    </p>
+                  </div>
+                )}
               </div>
             );
           })}

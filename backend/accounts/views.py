@@ -65,21 +65,29 @@ def signup(request):
 
 def me(request):
     user = request.session.get('user')
-    with get_db_connection() as conn:
-        cursor = conn.cursor(dictionary=True)
-        if user:
-            cursor.execute("SELECT role, is_active, is_verified FROM users WHERE id = %s", (user['id'],))
-            user_verification = cursor.fetchone()
-        else:
-            user = None
-
-    if not user_verification:
+    if not user:
         return JsonResponse(
             {
                 "status": "failed",
                 "loggedIn": False,
             }
         )
+    with get_db_connection() as conn:
+        cursor = conn.cursor(dictionary=True)
+
+        cursor.execute("SELECT role, is_active, is_verified FROM users WHERE id = %s", (user['id'],))
+        user_verification = cursor.fetchone()
+
+        if not user_verification:
+            return JsonResponse(
+                {
+                    "status": "failed",
+                    "loggedIn": False,
+                    "message": "User not found.",
+                }
+            )
+
+    
     
     if not user_verification['is_active']:
         return JsonResponse(

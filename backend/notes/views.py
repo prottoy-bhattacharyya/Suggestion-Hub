@@ -137,9 +137,12 @@ def note_file(request, note_id):
     # normalize slashes for Windows and Linux, and check if the path is within the BASE_DIR and is a file
     path = path.replace("\\", "/")
     print(f"Normalized Path: {path}")
-    if not path.startswith(os.path.normpath(settings.BASE_DIR)) or not os.path.isfile(path):
+    if not os.path.isfile(path):
         return JsonResponse({'status': 'error', 'error': 'File missing'}, status=404)
-
+    
+    if not path.startswith(os.path.normpath(settings.BASE_DIR).replace("\\", "/")):
+        return JsonResponse({'status': 'error', 'error': 'Invalid file path'}, status=400)
+    
     if file_type == 'pdf':
         content_type = 'application/pdf'
     else:

@@ -145,6 +145,7 @@ function Profile() {
   const { profile } = Route.useLoaderData();
   const user = profile.user;
   const isMe = profile.is_owner;
+  const courses = profile.courses ?? [];
 
   const role = user.role?.toLowerCase() ?? "";
   const isTeacher = role.includes("teacher") || role.includes("faculty");
@@ -419,6 +420,15 @@ function Profile() {
             label: "Employee ID",
             value: user.employee_id,
           },
+          ...(courses.length > 0
+            ? [
+                {
+                  icon: BookOpen,
+                  label: "Courses",
+                  value: courses.join(", "),
+                },
+              ]
+            : []),
         ]
       : [
           {

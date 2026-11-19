@@ -264,7 +264,6 @@ def profile(request, user_id):
     cursor.close()
     conn.close()
 
-    # Hide other users' email; only the session owner sees their own.
     session_user = request.session.get('user')
     is_owner = bool(session_user) and session_user.get("id") == user_id
 

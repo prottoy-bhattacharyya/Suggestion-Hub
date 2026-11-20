@@ -225,7 +225,7 @@ def get_notes(request):
 
         if logged_in_user_id != int(user_id):
             # Filter out notes that are not approved for other users
-            notes = [note for note in notes if note[9] == 'approved']
+            notes = [note for note in notes if note[9] == 'approved' or note[9] == 'pending']
         
         response_data = {
             'status': 'success',

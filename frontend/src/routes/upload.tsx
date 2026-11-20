@@ -468,10 +468,13 @@ function netPaths(c: Court, s: { stretch: Spring; bulge: Spring; sway: Spring })
   const levels = [0.2, 0.45, 0.7, 0.95];
   let crossD = "";
   for (let j = 0; j < levels.length - 1; j++) {
+    const topLevel = levels[j];
+    const bottomLevel = levels[j + 1];
+    if (topLevel === undefined || bottomLevel === undefined) continue;
     for (let i = 0; i < strands - 1; i++) {
       const even = (i + j) % 2 === 0;
-      const a = even ? at(i, levels[j]) : at(i + 1, levels[j]);
-      const b = even ? at(i + 1, levels[j + 1]) : at(i, levels[j + 1]);
+      const a = even ? at(i, topLevel) : at(i + 1, topLevel);
+      const b = even ? at(i + 1, bottomLevel) : at(i, bottomLevel);
       crossD += `M${a.x.toFixed(1)} ${a.y.toFixed(1)} L${b.x.toFixed(1)} ${b.y.toFixed(1)} `;
     }
   }

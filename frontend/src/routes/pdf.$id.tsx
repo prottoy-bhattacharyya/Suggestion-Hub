@@ -14,6 +14,11 @@ import {
   Users,
   MessageCircle,
   Send,
+  Sparkles,
+  Bot,
+  X,
+  RotateCcw,
+  ArrowRight,
 } from "lucide-react";
 import { StatusPill, Stars } from "@/components/PdfCard";
 import { getCSRFToken } from "@/lib/utils";
@@ -83,6 +88,12 @@ type Comment = {
   commenter_name: string;
   comment: string;
   created_at: string;
+};
+
+type AiMessage = {
+  id: number;
+  role: "user" | "assistant";
+  text: string;
 };
 
 const REASONS = ["Wrong content", "Copyright", "Inappropriate", "Corrupted file", "Duplicate"];
@@ -203,6 +214,7 @@ function CommentsSection({ noteId }: { noteId: number }) {
             <MessageCircle className="h-5 w-5 text-primary" />
             <h2 className="text-xl font-semibold tracking-tight">Comments</h2>
           </div>
+
 
           <p className="mt-1 text-sm text-muted-foreground">
             Discuss this material, ask questions, and help other students.
@@ -365,6 +377,21 @@ function PdfPage() {
   const [reportSent, setReportSent] = useState(false);
   const [reportLoading, setReportLoading] = useState(false);
   const [reportError, setReportError] = useState("");
+  const [aiOpen, setAiOpen] = useState(false);
+  const [aiQuestion, setAiQuestion] = useState("");
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiMessages, setAiMessages] = useState<AiMessage[]>([]);
+
+  useEffect(() => {
+    if (!aiOpen) return;
+
+    function handleEscape(event: KeyboardEvent) {
+      if (event.key === "Escape") setAiOpen(false);
+    }
+
+    window.addEventListener("keydown", handleEscape);
+    return () => window.removeEventListener("keydown", handleEscape);
+  }, [aiOpen]);
 
   const canRate = !note.is_owner && note.review_status === "approved";
 
@@ -450,6 +477,68 @@ function PdfPage() {
     }
   }
 
+  function createMockAnswer(question: string) {
+    const normalized = question.toLowerCase();
+    const subject = note.title.trim() || "this document";
+    const description = note.description?.trim();
+
+    if (normalized.includes("summary") || normalized.includes("summarize")) {
+      return `This PDF, “${subject},” appears to focus on ${description ? description : "the main concepts covered in the material"}. A study summary would typically highlight the central ideas, important definitions, examples, and any conclusions presented by the author.`;
+    }
+
+    if (normalized.includes("key") || normalized.includes("important") || normalized.includes("point")) {
+      return `The key areas to review in “${subject}” are: 1) the main concepts introduced early in the document, 2) the definitions or formulas that support those concepts, 3) any worked examples, and 4) the final conclusions or revision takeaways.`;
+    }
+
+    if (normalized.includes("exam") || normalized.includes("practice") || normalized.includes("question")) {
+      return `A likely exam revision question based on “${subject}” would ask you to explain the main topic, distinguish it from a related concept, and apply it to a short example. Start by reviewing the first section, any highlighted definitions, and the worked examples.`;
+    }
+
+    if (normalized.includes("definition") || normalized.includes("what is") || normalized.includes("meaning")) {
+      return `For “${subject},” the document likely defines this concept near the beginning or wherever the term is introduced. In a real AI version, I would cite the exact PDF section and page. Here is the mock response: connect the term to the surrounding topic and use the document’s example to explain it.`;
+    }
+
+    return `Based on “${subject},” ${description ? `the material covers ${description}. ` : ""}The most useful answer would come from the relevant section of the PDF. This demo AI gives a contextual preview until real document extraction and a language model are connected.`;
+  }
+
+  function submitAiQuestion(question: string) {
+    const trimmedQuestion = question.trim();
+    if (!trimmedQuestion || aiLoading) return;
+
+    setAiQuestion("");
+    setAiLoading(true);
+
+    const userMessage: AiMessage = {
+      id: Date.now(),
+      role: "user",
+      text: trimmedQuestion,
+    };
+
+    setAiMessages((messages) => [...messages, userMessage]);
+
+    window.setTimeout(() => {
+      const answer: AiMessage = {
+        id: Date.now() + 1,
+        role: "assistant",
+        text: createMockAnswer(trimmedQuestion),
+      };
+      setAiMessages((messages) => [...messages, answer]);
+      setAiLoading(false);
+    }, 850);
+  }
+
+  function handleAiSubmit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    const question = aiQuestion.trim();
+    if (!question || aiLoading) return;
+    submitAiQuestion(question);
+  }
+
+  function askSuggestedQuestion(question: string) {
+    submitAiQuestion(question);
+  }
+
   const avg = Number(ratingAvg);
   const activeStars = hoverRating || myRating;
   const starLabels = ["", "Poor", "Fair", "Good", "Great", "Excellent"];
@@ -497,6 +586,15 @@ function PdfPage() {
               </div>
 
               <div className="flex shrink-0 items-center gap-1">
+                {note.file_type !== "video" && (
+                  <button
+                    type="button"
+                    onClick={() => setAiOpen(true)}
+                    className="inline-flex h-9 items-center gap-1.5 rounded-full bg-primary/10 px-3 text-xs font-semibold text-primary transition-colors hover:bg-primary/20"
+                  >
+                    <Sparkles className="h-4 w-4" /> Ask AI
+                  </button>
+                )}
                 <a
                   href={note.file_url}
                   download
@@ -652,6 +750,120 @@ function PdfPage() {
               </a>
             </div>
           </div>
+
+          {/* Mock Ask AI panel */}
+          {note.file_type !== "video" && aiOpen && (
+            <div className="fixed inset-0 z-[70] flex justify-end bg-slate-950/25 backdrop-blur-[2px]" role="dialog" aria-modal="true" aria-label="Ask AI about this PDF">
+              <button
+                type="button"
+                className="absolute inset-0 cursor-default"
+                onClick={() => setAiOpen(false)}
+                aria-label="Close Ask AI"
+              />
+
+              <div className="relative flex h-full w-full max-w-[min(520px,92vw)] flex-col border-l border-border/70 bg-card shadow-[-24px_0_60px_-24px_rgba(15,23,42,.28)] animate-in slide-in-from-right duration-300">
+                <div className="relative overflow-hidden border-b border-border/70 px-6 py-5">
+                  <div className="pointer-events-none absolute -right-12 -top-16 h-40 w-40 rounded-full bg-primary/15 blur-3xl" />
+                  <div className="relative flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <span className="grid h-11 w-11 place-items-center rounded-2xl bg-gradient-to-br from-primary/20 to-primary/5 text-primary shadow-inner">
+                        <Sparkles className="h-5 w-5" />
+                      </span>
+                      <div>
+                        <p className="text-base font-semibold tracking-tight">Ask AI</p>
+                        <p className="mt-0.5 text-xs text-muted-foreground">Answers from this PDF · Mock mode</p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      {aiMessages.length > 0 && (
+                        <button type="button" onClick={() => setAiMessages([])} className="grid h-9 w-9 place-items-center rounded-full text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground" aria-label="Clear AI chat" title="Clear chat">
+                          <RotateCcw className="h-4 w-4" />
+                        </button>
+                      )}
+                      <button type="button" onClick={() => setAiOpen(false)} className="grid h-9 w-9 place-items-center rounded-full text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground" aria-label="Close Ask AI">
+                        <X className="h-5 w-5" />
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+              {aiMessages.length === 0 ? (
+                <div className="flex-1 overflow-y-auto px-6 py-8">
+                  <div className="mx-auto max-w-sm text-center">
+                    <span className="mx-auto grid h-14 w-14 place-items-center rounded-2xl bg-primary/10 text-primary shadow-lg shadow-primary/10">
+                      <Bot className="h-7 w-7" />
+                    </span>
+                    <h2 className="mt-4 text-xl font-semibold tracking-tight">What would you like to know?</h2>
+                    <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
+                      Ask a question about “{note.title}”. This preview uses contextual mock answers.
+                    </p>
+                  </div>
+                  <div className="mt-7 grid gap-2.5">
+                    {["Summarize this PDF", "What are the key points?", "Give me likely exam questions"].map((question) => (
+                      <button key={question} type="button" onClick={() => askSuggestedQuestion(question)} className="group flex items-center justify-between rounded-2xl border border-border/70 bg-background px-4 py-3.5 text-left text-sm font-medium transition-all hover:-translate-y-0.5 hover:border-primary/30 hover:bg-primary/5 hover:shadow-md">
+                        <span>{question}</span>
+                        <ArrowRight className="h-4 w-4 text-muted-foreground transition-transform group-hover:translate-x-1 group-hover:text-primary" />
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ) : (
+                <div className="flex-1 space-y-5 overflow-y-auto px-6 py-6">
+                  {aiMessages.map((message) => (
+                    <div key={message.id} className={`flex ${message.role === "user" ? "justify-end" : "justify-start"}`}>
+                      {message.role === "assistant" && (
+                        <span className="mr-2.5 mt-1 grid h-8 w-8 shrink-0 place-items-center rounded-xl bg-primary/10 text-primary">
+                          <Bot className="h-4 w-4" />
+                        </span>
+                      )}
+                      <p className={`max-w-[82%] rounded-2xl px-4 py-3 text-sm leading-6 ${message.role === "user" ? "bg-primary text-primary-foreground shadow-lg shadow-primary/15" : "border border-border/60 bg-secondary/70 text-foreground"}`}>
+                        {message.text}
+                      </p>
+                    </div>
+                  ))}
+                  {aiLoading && (
+                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                      <span className="grid h-8 w-8 place-items-center rounded-xl bg-primary/10 text-primary"><Bot className="h-4 w-4" /></span>
+                      <span className="flex gap-1 rounded-full border border-border/60 bg-secondary/70 px-3 py-2">
+                        <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-primary" />
+                        <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-primary [animation-delay:150ms]" />
+                        <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-primary [animation-delay:300ms]" />
+                      </span>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              <div className="border-t border-border/70 bg-card/95 px-5 py-4 backdrop-blur">
+                <form id="ask-ai-form" onSubmit={handleAiSubmit}>
+                  <div className="flex items-end gap-2.5 rounded-2xl border border-border bg-background p-2 shadow-sm transition-all focus-within:border-primary/40 focus-within:ring-4 focus-within:ring-primary/10">
+                    <textarea
+                      value={aiQuestion}
+                      onChange={(event) => setAiQuestion(event.target.value)}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter" && !event.shiftKey) {
+                          event.preventDefault();
+                          event.currentTarget.form?.requestSubmit();
+                        }
+                      }}
+                      rows={2}
+                      maxLength={500}
+                      placeholder="Ask about this PDF..."
+                      disabled={aiLoading}
+                      className="min-h-12 flex-1 resize-none border-0 bg-transparent px-2 py-2 text-sm outline-none placeholder:text-muted-foreground/70 disabled:opacity-60"
+                    />
+                    <button type="submit" disabled={!aiQuestion.trim() || aiLoading} className="mb-0.5 grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-primary text-primary-foreground shadow-lg shadow-primary/20 transition-transform hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-50" aria-label="Send question">
+                      {aiLoading ? <LoaderCircle className="h-5 w-5 animate-spin" /> : <Send className="h-5 w-5" />}
+                    </button>
+                  </div>
+                  <p className="mt-2 text-center text-[10px] text-muted-foreground">
+                    Demo responses · Enter to send · Shift + Enter for a new line
+                  </p>
+                </form>
+              </div>
+            </div>
+          </div>
+          )}
 
           {/* Rate this PDF */}
           {note.review_status === "approved" && (

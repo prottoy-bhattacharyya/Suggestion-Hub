@@ -1325,6 +1325,7 @@ function Upload() {
         response.data?.message ?? `Your ${mediaLabel} has been submitted successfully.`,
       );
 
+      setProgress(100);
       setDone(true);
     } catch (err: unknown) {
       console.error("Upload failed:", err);
@@ -1359,6 +1360,7 @@ function Upload() {
       } else {
         setError(err instanceof Error ? err.message : "An unexpected error occurred.");
       }
+      setProgress(0);
     } finally {
       setLoading(false);
     }
@@ -1949,23 +1951,36 @@ function Upload() {
 
               {loading && (
                 <div className="mt-4" aria-live="polite">
+                  <div className="mb-2 flex items-center justify-between gap-3">
+                    <p className="text-xs font-medium text-foreground">
+                      {progress < 100 ? "Uploading file" : "Upload complete"}
+                    </p>
+                    <span className="min-w-12 rounded-full bg-primary/10 px-2.5 py-1 text-center text-xs font-semibold tabular-nums text-primary">
+                      {progress}%
+                    </span>
+                  </div>
                   <div
-                    className="h-1.5 overflow-hidden rounded-full bg-border"
+                    className="h-2 overflow-hidden rounded-full border border-border/60 bg-secondary"
                     role="progressbar"
+                    aria-label="File upload progress"
                     aria-valuemin={0}
                     aria-valuemax={100}
                     aria-valuenow={progress}
                   >
                     <div
-                      className="h-full rounded-full bg-primary transition-[width] duration-200 ease-out"
+                      className="relative h-full rounded-full bg-primary transition-[width] duration-300 ease-out"
                       style={{ width: `${progress}%` }}
-                    />
+                    >
+                      {progress > 0 && progress < 100 && (
+                        <span className="absolute inset-y-0 right-0 w-8 animate-pulse bg-white/25" />
+                      )}
+                    </div>
                   </div>
-                  <p className="mt-2 text-xs text-muted-foreground">
-                    {progress < 100
-                      ? `Uploading… ${progress}%`
-                      : "Upload complete. Checking your file…"}
-                  </p>
+                  {progress === 100 && (
+                    <p className="mt-2 text-xs text-muted-foreground">
+                      Checking your file…
+                    </p>
+                  )}
                 </div>
               )}
 
@@ -2013,18 +2028,36 @@ function Upload() {
               </div>
               {loading && (
                 <div className="mt-4" aria-live="polite">
+                  <div className="mb-2 flex items-center justify-between gap-3">
+                    <p className="text-xs font-medium text-foreground">
+                      {progress < 100 ? "Uploading file" : "Upload complete"}
+                    </p>
+                    <span className="min-w-12 rounded-full bg-primary/10 px-2.5 py-1 text-center text-xs font-semibold tabular-nums text-primary">
+                      {progress}%
+                    </span>
+                  </div>
                   <div
-                    className="h-1.5 overflow-hidden rounded-full bg-border"
+                    className="h-2 overflow-hidden rounded-full border border-border/60 bg-secondary"
                     role="progressbar"
+                    aria-label="File upload progress"
                     aria-valuemin={0}
                     aria-valuemax={100}
                     aria-valuenow={progress}
                   >
                     <div
-                      className="h-full rounded-full bg-primary transition-[width] duration-200 ease-out"
+                      className="relative h-full rounded-full bg-primary transition-[width] duration-300 ease-out"
                       style={{ width: `${progress}%` }}
-                    />
+                    >
+                      {progress > 0 && progress < 100 && (
+                        <span className="absolute inset-y-0 right-0 w-8 animate-pulse bg-white/25" />
+                      )}
+                    </div>
                   </div>
+                  {progress === 100 && (
+                    <p className="mt-2 text-xs text-muted-foreground">
+                      Checking your file…
+                    </p>
+                  )}
                 </div>
               )}
             </section>
@@ -2229,7 +2262,7 @@ function Upload() {
                   {loading ? (
                     <>
                       <LoaderCircle size={18} className="animate-spin motion-reduce:animate-none" />
-                      {progress < 100 ? "Uploading…" : "Checking file…"}
+                      {progress < 100 ? `Uploading… ${progress}%` : "Checking file…"}
                     </>
                   ) : (
                     <>

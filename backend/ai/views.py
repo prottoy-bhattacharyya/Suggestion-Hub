@@ -1,10 +1,16 @@
 import json
 import os
+import urllib.request
+import urllib.error
 
 from django.conf import settings
 from django.http import JsonResponse
 from pypdf import PdfReader
-from google import genai
+
+try:
+    from google import genai
+except ImportError:
+    genai = None
 
 
 def ask(request):
@@ -101,19 +107,126 @@ def ask(request):
 
                 If the answer is not in the PDF, say that it is not mentioned.
             """
+
+    gemini_error = None
+    gemini_api_key = os.environ.get("GEMINI_API_KEY", "").strip()
+    gemini_model = os.environ.get("GEMINI_MODEL", "gemini-2.5-flash").strip()
+
+    if gemini_api_key and genai is not None:
+        try:
+            gemini_client = genai.Client(api_key=gemini_api_key)
+            gemini_response = gemini_client.models.generate_content(
+                model=gemini_model,
+                contents=prompt,
+            )
+            gemini_answer = getattr(gemini_response, "text", None)
+
+            if isinstance(gemini_answer, str) and gemini_answer.strip():
+                return JsonResponse({
+                    "status": "success",
+                    "provider": "gemini",
+                    "answer": gemini_answer.strip(),
+                })
+
+            gemini_error = "Gemini returned an empty response."
+        except Exception as error:
+            gemini_error = str(error)
+    elif genai is None:
+        gemini_error = "The google-genai package is not installed."
+    elif not gemini_api_key:
+        gemini_error = "GEMINI_API_KEY is not configured."
+
+    openrouter_api_key = os.environ.get("OPENROUTER_API_KEY", "").strip()
+    if not openrouter_api_key:
+        return JsonResponse(
+            {
+                "error": "Gemini failed and OPENROUTER_API_KEY is not configured.",
+                "gemini_error": gemini_error,
+            },
+            status=502,
+        )
+
+    openrouter_model = os.environ.get("OPENROUTER_MODEL", "openrouter/free").strip()
+    payload = {
+        "model": openrouter_model,
+        "messages": [
+            {
+                "role": "system",
+                "content": "You answer questions only from the supplied PDF context. If the PDF does not contain the answer, say that clearly.",
+            },
+            {
+                "role": "user",
+                "content": prompt,
+            },
+        ],
+    }
+
     try:
-        client = genai.Client()
-        response = client.models.generate_content(
-            model="gemini-3.8-flash",
-            contents=prompt,
+        request_body = json.dumps(payload).encode("utf-8")
+        openrouter_request = urllib.request.Request(
+            "https://openrouter.ai/api/v1/chat/completions",
+            data=request_body,
+            headers={
+                "Authorization": f"Bearer {openrouter_api_key}",
+                "Content-Type": "application/json",
+                "HTTP-Referer": os.environ.get("OPENROUTER_SITE_URL", ""),
+                "X-Title": os.environ.get("OPENROUTER_APP_NAME", "Suggestion Hub"),
+            },
+            method="POST",
+        )
+
+        with urllib.request.urlopen(openrouter_request, timeout=60) as response:
+            openrouter_response = json.loads(response.read().decode("utf-8"))
+    except urllib.error.HTTPError as error:
+        try:
+            details = json.loads(error.read().decode("utf-8"))
+        except (json.JSONDecodeError, UnicodeDecodeError):
+            details = {}
+
+        provider_message = (
+            details.get("error", {}).get("message")
+            if isinstance(details.get("error"), dict)
+            else None
+        ) or details.get("message") or str(error)
+        return JsonResponse(
+            {
+                "error": provider_message,
+                "gemini_error": gemini_error,
+            },
+            status=error.code,
         )
     except Exception as e:
         return JsonResponse(
-            {"error":  str(e)},
-            status=500,
+            {
+                "error": str(e),
+                "gemini_error": gemini_error,
+            },
+            status=502,
+        )
+
+    try:
+        answer = openrouter_response["choices"][0]["message"]["content"]
+    except (KeyError, IndexError, TypeError):
+        return JsonResponse(
+            {
+                "error": "OpenRouter returned an empty or invalid response.",
+                "gemini_error": gemini_error,
+            },
+            status=502,
+        )
+
+    if not isinstance(answer, str) or not answer.strip():
+        return JsonResponse(
+            {
+                "error": "OpenRouter returned an empty response.",
+                "gemini_error": gemini_error,
+            },
+            status=502,
         )
 
     return JsonResponse({
         "status": "success",
-        "answer": response.text,
+        "provider": "openrouter",
+        "gemini_error": gemini_error,
+        "answer": answer.strip(),
     })

@@ -12,6 +12,8 @@ dependencies = [
     "django-cors-headers>=4.9.0",
     "mysql-connector-python>=26.10.0",
     "mysqlclient>=2.3.0",
+    "pypdf>=6",
+    "google-genai>=1",
 ]
 
 [project.scripts]

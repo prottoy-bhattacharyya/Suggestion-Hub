@@ -26,7 +26,7 @@ urlpatterns = [
     path("review/", include("reviews.urls")),
     path("social/", include("social.urls")),
     path("search/", include("search.urls")),
-    # path("ask/", include("ai.urls")),
+    path("ai/", include("ai.urls")),
     # path("notifications/", include("notifications.urls")),
     # path("reports/", include("moderation.urls")),
 ]

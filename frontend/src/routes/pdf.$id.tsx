@@ -98,6 +98,118 @@ type AiMessage = {
 
 const REASONS = ["Wrong content", "Copyright", "Inappropriate", "Corrupted file", "Duplicate"];
 
+function renderInlineMarkdown(text: string) {
+  const parts = text.split(/(\*\*[^*]+\*\*|`[^`]+`)/g);
+
+  return parts.map((part, index) => {
+    if (part.startsWith("**") && part.endsWith("**")) {
+      return <strong key={index}>{part.slice(2, -2)}</strong>;
+    }
+
+    if (part.startsWith("`") && part.endsWith("`")) {
+      return (
+        <code
+          key={index}
+          className="rounded-md bg-background/70 px-1.5 py-0.5 font-mono text-[0.9em]"
+        >
+          {part.slice(1, -1)}
+        </code>
+      );
+    }
+
+    return <span key={index}>{part}</span>;
+  });
+}
+
+function MarkdownText({ text }: { text: string }) {
+  const lines = text.replace(/\r/g, "").split("\n");
+  const blocks: React.ReactNode[] = [];
+  let index = 0;
+
+  while (index < lines.length) {
+    const line = lines[index]?.trim();
+
+    if (!line) {
+      index++;
+      continue;
+    }
+
+    const heading = line.match(/^(#{1,3})\s+(.+)$/);
+    if (heading) {
+      const headingText = heading[2] ?? "";
+      const level = heading[1]?.length ?? 1;
+      const headingClass =
+        level === 1
+          ? "mt-4 text-base font-bold"
+          : level === 2
+            ? "mt-3 text-sm font-bold"
+            : "mt-3 text-sm font-semibold";
+
+      blocks.push(
+        <p key={`heading-${index}`} className={headingClass}>
+          {renderInlineMarkdown(headingText)}
+        </p>,
+      );
+      index++;
+      continue;
+    }
+
+    if (/^[-*+]\s+/.test(line)) {
+      const items: string[] = [];
+      while (index < lines.length) {
+        const bullet = lines[index]?.trim().match(/^[-*+]\s+(.+)$/);
+        if (!bullet) break;
+        items.push(bullet[1] ?? "");
+        index++;
+      }
+      blocks.push(
+        <ul key={`bullets-${index}`} className="my-2 list-disc space-y-1 pl-5 marker:text-primary">
+          {items.map((item, itemIndex) => (
+            <li key={itemIndex}>{renderInlineMarkdown(item)}</li>
+          ))}
+        </ul>,
+      );
+      continue;
+    }
+
+    if (/^\d+[.)]\s+/.test(line)) {
+      const items: string[] = [];
+      while (index < lines.length) {
+        const numbered = lines[index]?.trim().match(/^\d+[.)]\s+(.+)$/);
+        if (!numbered) break;
+        items.push(numbered[1] ?? "");
+        index++;
+      }
+      blocks.push(
+        <ol key={`numbers-${index}`} className="my-2 list-decimal space-y-1 pl-5 marker:font-semibold marker:text-primary">
+          {items.map((item, itemIndex) => (
+            <li key={itemIndex}>{renderInlineMarkdown(item)}</li>
+          ))}
+        </ol>,
+      );
+      continue;
+    }
+
+    const paragraphLines: string[] = [line];
+    index++;
+    while (
+      index < lines.length &&
+      lines[index]?.trim() &&
+      !/^([-*+]\s+|\d+[.)]\s+|#{1,3}\s+)/.test(lines[index]?.trim() ?? "")
+    ) {
+      paragraphLines.push(lines[index]?.trim() ?? "");
+      index++;
+    }
+    blocks.push(
+      <p key={`paragraph-${index}`} className="my-2 first:mt-0 last:mb-0 leading-6">
+        {renderInlineMarkdown(paragraphLines.join(" "))}
+      </p>,
+    );
+  }
+
+  return <div>{blocks}</div>;
+}
+
 function CommentsSection({ noteId }: { noteId: number }) {
   const [comments, setComments] = useState<Comment[]>([]);
   const [commentText, setCommentText] = useState("");
@@ -477,31 +589,7 @@ function PdfPage() {
     }
   }
 
-  function createMockAnswer(question: string) {
-    const normalized = question.toLowerCase();
-    const subject = note.title.trim() || "this document";
-    const description = note.description?.trim();
-
-    if (normalized.includes("summary") || normalized.includes("summarize")) {
-      return `This PDF, “${subject},” appears to focus on ${description ? description : "the main concepts covered in the material"}. A study summary would typically highlight the central ideas, important definitions, examples, and any conclusions presented by the author.`;
-    }
-
-    if (normalized.includes("key") || normalized.includes("important") || normalized.includes("point")) {
-      return `The key areas to review in “${subject}” are: 1) the main concepts introduced early in the document, 2) the definitions or formulas that support those concepts, 3) any worked examples, and 4) the final conclusions or revision takeaways.`;
-    }
-
-    if (normalized.includes("exam") || normalized.includes("practice") || normalized.includes("question")) {
-      return `A likely exam revision question based on “${subject}” would ask you to explain the main topic, distinguish it from a related concept, and apply it to a short example. Start by reviewing the first section, any highlighted definitions, and the worked examples.`;
-    }
-
-    if (normalized.includes("definition") || normalized.includes("what is") || normalized.includes("meaning")) {
-      return `For “${subject},” the document likely defines this concept near the beginning or wherever the term is introduced. In a real AI version, I would cite the exact PDF section and page. Here is the mock response: connect the term to the surrounding topic and use the document’s example to explain it.`;
-    }
-
-    return `Based on “${subject},” ${description ? `the material covers ${description}. ` : ""}The most useful answer would come from the relevant section of the PDF. This demo AI gives a contextual preview until real document extraction and a language model are connected.`;
-  }
-
-  function submitAiQuestion(question: string) {
+  async function submitAiQuestion(question: string) {
     const trimmedQuestion = question.trim();
     if (!trimmedQuestion || aiLoading) return;
 
@@ -516,15 +604,47 @@ function PdfPage() {
 
     setAiMessages((messages) => [...messages, userMessage]);
 
-    window.setTimeout(() => {
+    try {
+      const response = await api.get("/ai/ask/", {
+        params: {
+          note_id: note.id,
+          question: trimmedQuestion,
+        },
+      });
+
       const answer: AiMessage = {
         id: Date.now() + 1,
         role: "assistant",
-        text: createMockAnswer(trimmedQuestion),
+        text:
+          typeof response.data.answer === "string"
+            ? response.data.answer
+            : "The AI returned an empty response. Please try again.",
       };
       setAiMessages((messages) => [...messages, answer]);
+    } catch (error: unknown) {
+      let message = "I could not answer that question. Please try again.";
+
+      if (axios.isAxiosError(error)) {
+        message =
+          error.response?.data?.error ??
+          error.response?.data?.detail ??
+          error.response?.data?.message ??
+          (error.response?.status === 401
+            ? "Please log in to ask questions about this PDF."
+            : message);
+      }
+
+      setAiMessages((messages) => [
+        ...messages,
+        {
+          id: Date.now() + 1,
+          role: "assistant",
+          text: message,
+        },
+      ]);
+    } finally {
       setAiLoading(false);
-    }, 850);
+    }
   }
 
   function handleAiSubmit(event: React.FormEvent<HTMLFormElement>) {
@@ -751,7 +871,7 @@ function PdfPage() {
             </div>
           </div>
 
-          {/* Mock Ask AI panel */}
+          {/* Ask AI panel */}
           {note.file_type !== "video" && aiOpen && (
             <div className="fixed inset-0 z-[70] flex justify-end bg-slate-950/25 backdrop-blur-[2px]" role="dialog" aria-modal="true" aria-label="Ask AI about this PDF">
               <button
@@ -771,7 +891,7 @@ function PdfPage() {
                       </span>
                       <div>
                         <p className="text-base font-semibold tracking-tight">Ask AI</p>
-                        <p className="mt-0.5 text-xs text-muted-foreground">Answers from this PDF · Mock mode</p>
+                        <p className="mt-0.5 text-xs text-muted-foreground">Answers from this PDF</p>
                       </div>
                     </div>
                     <div className="flex items-center gap-1">
@@ -795,7 +915,7 @@ function PdfPage() {
                     </span>
                     <h2 className="mt-4 text-xl font-semibold tracking-tight">What would you like to know?</h2>
                     <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
-                      Ask a question about “{note.title}”. This preview uses contextual mock answers.
+                      Ask a question about “{note.title}” and get a PDF-aware answer.
                     </p>
                   </div>
                   <div className="mt-7 grid gap-2.5">
@@ -816,9 +936,13 @@ function PdfPage() {
                           <Bot className="h-4 w-4" />
                         </span>
                       )}
-                      <p className={`max-w-[82%] rounded-2xl px-4 py-3 text-sm leading-6 ${message.role === "user" ? "bg-primary text-primary-foreground shadow-lg shadow-primary/15" : "border border-border/60 bg-secondary/70 text-foreground"}`}>
-                        {message.text}
-                      </p>
+                      <div className={`max-w-[82%] rounded-2xl px-4 py-3 text-sm ${message.role === "user" ? "bg-primary text-primary-foreground shadow-lg shadow-primary/15" : "border border-border/60 bg-secondary/70 text-foreground"}`}>
+                        {message.role === "assistant" ? (
+                          <MarkdownText text={message.text} />
+                        ) : (
+                          <p className="leading-6">{message.text}</p>
+                        )}
+                      </div>
                     </div>
                   ))}
                   {aiLoading && (
@@ -857,7 +981,7 @@ function PdfPage() {
                     </button>
                   </div>
                   <p className="mt-2 text-center text-[10px] text-muted-foreground">
-                    Demo responses · Enter to send · Shift + Enter for a new line
+                    Enter to send · Shift + Enter for a new line
                   </p>
                 </form>
               </div>

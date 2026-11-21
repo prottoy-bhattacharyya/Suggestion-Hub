@@ -18,6 +18,12 @@ export type Note = {
   file_type?: "pdf" | "video";
 };
 
+function shortDescription(description: string, wordLimit = 20) {
+  const words = description.trim().split(/\s+/).filter(Boolean);
+  if (words.length <= wordLimit) return description.trim();
+  return `${words.slice(0, wordLimit).join(" ")}...`;
+}
+
 export function Stars({ value }: { value: number }) {
   return (
     <span className="inline-flex items-center gap-1 text-sm">
@@ -79,7 +85,7 @@ export function PdfCard({ pdf }: { pdf: Pdf }) {
           </h3>
 
           <p className="mt-1 text-sm text-muted-foreground">
-            {pdf.description}
+            {shortDescription(pdf.description)}
           </p>
 
           <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-muted-foreground">
@@ -159,7 +165,7 @@ export function NoteCard({ note }: { note: Note }) {
 
           {note.description && (
             <p className="mt-1 text-sm text-muted-foreground">
-              {note.description}
+              {shortDescription(note.description)}
             </p>
           )}
 

@@ -434,6 +434,7 @@ def get_notes(request):
             left join users u on n.uploader_id = u.id
             left join reviews r on n.id = r.note_id
             where u.id = %s
+            order by n.created_at desc
             """,
             (user_id,),
         )

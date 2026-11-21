@@ -47,6 +47,7 @@ type MediaKind = "pdf" | "video";
 
 const MAX_PDF_SIZE = 20 * 1024 * 1024; // 20 MB
 const MAX_VIDEO_SIZE = 500 * 1024 * 1024; // 500 MB
+const CHUNK_SIZE = 10 * 1024 * 1024;
 
 const VIDEO_EXTENSIONS = [".mp4", ".webm", ".mov"];
 
@@ -1296,36 +1297,68 @@ function Upload() {
 
       const csrfToken = await getCSRFToken();
 
-      // FormData is required for file uploads.
-      const formData = new FormData();
+      const totalChunks = Math.ceil(file.size / CHUNK_SIZE);
+      const uploadId =
+        typeof crypto.randomUUID === "function"
+          ? crypto.randomUUID()
+          : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+      let uploadedBytes = 0;
 
-      formData.append("file", file);
-      formData.append("media_type", mediaKind); // "pdf" or "video" — Django can branch on this
-      formData.append("title", title.trim());
-      formData.append("course_id", courseId);
-      formData.append("type", type);
-      formData.append("intake", intake.trim());
-      formData.append("section", section.trim());
-      formData.append("description", description.trim());
+      for (let chunkIndex = 0; chunkIndex < totalChunks; chunkIndex++) {
+        const start = chunkIndex * CHUNK_SIZE;
+        const end = Math.min(start + CHUNK_SIZE, file.size);
+        const chunk = file.slice(start, end);
 
-      const response = await api.post("/notes/upload/", formData, {
-        headers: {
-          Accept: "application/json",
-          ...(csrfToken ? { "X-CSRFToken": csrfToken } : {}),
-        },
-        onUploadProgress: (event) => {
-          const total = event.total ?? file.size;
-          if (total > 0) {
-            setProgress(Math.min(100, Math.round((event.loaded / total) * 100)));
-          }
-        },
-      });
+        const chunkForm = new FormData();
+        chunkForm.append("file", chunk, file.name);
+        chunkForm.append("upload_id", uploadId);
+        chunkForm.append("chunk_index", String(chunkIndex));
+        chunkForm.append("total_chunks", String(totalChunks));
+        chunkForm.append("declared_size", String(file.size));
+        chunkForm.append("original_name", file.name);
+        chunkForm.append("media_type", mediaKind);
+        chunkForm.append("title", title.trim());
+        chunkForm.append("course_id", courseId);
+        chunkForm.append("type", type);
+        chunkForm.append("intake", intake.trim());
+        chunkForm.append("section", section.trim());
+        chunkForm.append("description", description.trim());
+
+        const response = await api.post("/notes/upload/", chunkForm, {
+          headers: {
+            Accept: "application/json",
+            ...(csrfToken ? { "X-CSRFToken": csrfToken } : {}),
+          },
+          onUploadProgress: (event) => {
+            const chunkLoaded = event.loaded ?? 0;
+            const bytesLoaded = uploadedBytes + chunkLoaded;
+            setProgress(
+              Math.min(
+                99,
+                Math.round((bytesLoaded / file.size) * 100),
+              ),
+            );
+          },
+        });
+
+        if (response.data.status !== "success" && response.data.status !== "pending") {
+          throw new Error(response.data.error ?? "Upload failed.");
+        }
+
+        uploadedBytes += chunk.size;
+        setProgress(
+          chunkIndex === totalChunks - 1
+            ? 100
+            : Math.min(
+                99,
+                Math.round((uploadedBytes / file.size) * 100),
+              ),
+        );
+      }
 
       setSuccessMessage(
-        response.data?.message ?? `Your ${mediaLabel} has been submitted successfully.`,
+        `Your ${mediaLabel} has been submitted successfully.`,
       );
-
-      setProgress(100);
       setDone(true);
     } catch (err: unknown) {
       console.error("Upload failed:", err);

@@ -1,6 +1,9 @@
 import json
 import os
 import re
+import hashlib
+import shutil
+from pathlib import Path
 
 from django.conf import settings
 from django.http import FileResponse, HttpResponse, JsonResponse
@@ -14,6 +17,7 @@ MAX_VIDEO_BYTES = 500 * 1024 * 1024
 PDF_EXTENSIONS = {".pdf"}
 VIDEO_EXTENSIONS = {".mp4", ".webm", ".mov"}
 VIDEO_CONTENT_TYPES = {".mp4": "video/mp4", ".webm": "video/webm", ".mov": "video/quicktime"}
+CHUNK_SIZE = 10 * 1024 * 1024
 
 # Create your views here.
 def upload_note(request):
@@ -34,6 +38,218 @@ def upload_note(request):
     type = request.POST.get('type')
     intake = request.POST.get('intake')
     section = request.POST.get('section')
+
+    upload_id = request.POST.get('upload_id')
+    if upload_id:
+        try:
+            chunk_index = int(request.POST.get('chunk_index', '-1'))
+            total_chunks = int(request.POST.get('total_chunks', '0'))
+            declared_size = int(request.POST.get('declared_size', '0'))
+        except (TypeError, ValueError):
+            return JsonResponse(
+                {'status': 'error', 'error': 'Invalid chunk metadata'},
+                status=400,
+            )
+
+        original_name = os.path.basename(request.POST.get('original_name', ''))
+        chunk = request.FILES.get('file')
+
+        if not re.fullmatch(r'[A-Za-z0-9_-]{8,128}', upload_id):
+            return JsonResponse(
+                {'status': 'error', 'error': 'Invalid upload_id'},
+                status=400,
+            )
+
+        if not original_name:
+            return JsonResponse(
+                {'status': 'error', 'error': 'Original filename is required'},
+                status=400,
+            )
+
+        if not chunk:
+            return JsonResponse(
+                {'status': 'error', 'error': 'No chunk provided'},
+                status=400,
+            )
+
+        if chunk_index < 0 or chunk_index >= total_chunks:
+            return JsonResponse(
+                {'status': 'error', 'error': 'Invalid chunk index'},
+                status=400,
+            )
+
+        if total_chunks < 1 or declared_size < 1:
+            return JsonResponse(
+                {'status': 'error', 'error': 'Invalid upload size'},
+                status=400,
+            )
+
+        expected_chunks = (declared_size + CHUNK_SIZE - 1) // CHUNK_SIZE
+        if total_chunks != expected_chunks:
+            return JsonResponse(
+                {'status': 'error', 'error': 'Chunk count mismatch'},
+                status=400,
+            )
+
+        ext = os.path.splitext(original_name)[1].lower()
+        if ext in PDF_EXTENSIONS:
+            file_type = 'pdf'
+        elif ext in VIDEO_EXTENSIONS:
+            file_type = 'video'
+        else:
+            return JsonResponse(
+                {'status': 'error', 'error': 'Unsupported file type'},
+                status=400,
+            )
+
+        media_type = (request.POST.get('media_type') or '').lower()
+        if media_type and media_type != file_type:
+            return JsonResponse(
+                {'status': 'error', 'error': 'File does not match the selected upload kind'},
+                status=400,
+            )
+
+        max_bytes = MAX_PDF_BYTES if file_type == 'pdf' else MAX_VIDEO_BYTES
+        if declared_size > max_bytes:
+            return JsonResponse(
+                {'status': 'error', 'error': 'File exceeds the maximum size'},
+                status=400,
+            )
+
+        if chunk.size > CHUNK_SIZE:
+            return JsonResponse(
+                {'status': 'error', 'error': 'Chunk exceeds 10 MB'},
+                status=400,
+            )
+
+        if chunk_index < total_chunks - 1:
+            if chunk.size != CHUNK_SIZE:
+                return JsonResponse(
+                    {'status': 'error', 'error': 'Non-final chunk must be exactly 10 MB'},
+                    status=400,
+                )
+        elif chunk.size != declared_size - (chunk_index * CHUNK_SIZE):
+            return JsonResponse(
+                {'status': 'error', 'error': 'Final chunk size mismatch'},
+                status=400,
+            )
+
+        chunks_dir = Path(settings.BASE_DIR) / 'uploaded_notes' / '.chunks'
+        upload_dir = chunks_dir / upload_id
+        upload_dir.mkdir(parents=True, exist_ok=True)
+        chunk_path = upload_dir / f'{chunk_index}.part'
+
+        with chunk_path.open('wb') as destination:
+            for chunk_part in chunk.chunks():
+                destination.write(chunk_part)
+
+        if chunk_index + 1 < total_chunks:
+            return JsonResponse({
+                'status': 'pending',
+                'received_chunks': chunk_index + 1,
+                'total_chunks': total_chunks,
+            })
+
+        missing_chunks = [
+            index
+            for index in range(total_chunks)
+            if not (upload_dir / f'{index}.part').is_file()
+        ]
+
+        if missing_chunks:
+            return JsonResponse(
+                {
+                    'status': 'error',
+                    'error': 'Missing upload chunks',
+                    'missing_chunks': missing_chunks,
+                },
+                status=400,
+            )
+
+        assembled_path = upload_dir / 'assembled.part'
+        assembled_size = 0
+
+        with assembled_path.open('wb') as assembled:
+            for index in range(total_chunks):
+                part_path = upload_dir / f'{index}.part'
+                with part_path.open('rb') as part:
+                    shutil.copyfileobj(part, assembled)
+                assembled_size += part_path.stat().st_size
+
+        if assembled_size != declared_size:
+            shutil.rmtree(upload_dir, ignore_errors=True)
+            return JsonResponse(
+                {'status': 'error', 'error': 'Assembled file size mismatch'},
+                status=400,
+            )
+
+        digest = hashlib.sha256()
+        with assembled_path.open('rb') as assembled:
+            for block in iter(lambda: assembled.read(1024 * 1024), b''):
+                digest.update(block)
+        file_hash = digest.hexdigest()
+
+        conn = get_db_connection()
+        try:
+            with conn.cursor() as cursor:
+                cursor.execute(
+                    'SELECT COUNT(*) FROM notes WHERE file_hash = %s',
+                    (file_hash,),
+                )
+                if cursor.fetchone()[0] > 0:
+                    shutil.rmtree(upload_dir, ignore_errors=True)
+                    return JsonResponse(
+                        {'status': 'error', 'error': 'Duplicate file detected'},
+                        status=400,
+                    )
+
+            os.makedirs(settings.BASE_DIR / 'uploaded_notes', exist_ok=True)
+            file_path = os.path.join('uploaded_notes', original_name)
+            final_path = settings.BASE_DIR / file_path
+            os.replace(assembled_path, final_path)
+
+            with conn.cursor() as insert_cursor:
+                insert_cursor.execute(
+                    """
+                    INSERT INTO notes (
+                        uploader_id, course_id, title, description, type,
+                        intake, section, file, file_type, file_hash
+                    )
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    """,
+                    (
+                        uploader_id,
+                        course_id,
+                        title,
+                        description,
+                        type,
+                        intake,
+                        section,
+                        file_path,
+                        file_type,
+                        file_hash,
+                    ),
+                )
+
+            conn.commit()
+            shutil.rmtree(upload_dir, ignore_errors=True)
+            return JsonResponse(
+                {
+                    'status': 'success',
+                    'message': 'Note uploaded successfully',
+                },
+                status=201,
+            )
+        except Exception as error:
+            conn.rollback()
+            shutil.rmtree(upload_dir, ignore_errors=True)
+            return JsonResponse(
+                {'status': 'error', 'error': str(error)},
+                status=500,
+            )
+        finally:
+            conn.close()
+
     file = request.FILES.get('file')
 
     if not file:

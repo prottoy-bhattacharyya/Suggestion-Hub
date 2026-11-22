@@ -71,9 +71,6 @@ def ask(request):
     if file_type != "pdf":
         return JsonResponse({"error": "This feature only supports PDFs."}, status=400)
 
-    if review_status != "approved":
-        return JsonResponse({"error": "This PDF is not approved."}, status=403)
-
     pdf_path = os.path.normpath(
         os.path.join(settings.BASE_DIR, file_name)
     )

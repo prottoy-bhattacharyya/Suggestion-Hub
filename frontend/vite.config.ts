@@ -14,6 +14,8 @@ export default defineConfig({
   },
   vite: {
     server: {
+      port: 8001,
+      strictPort: true,
       allowedHosts: [
         "suggestion-hub.prottoy.qzz.io",
         "www.suggestion-hub.prottoy.qzz.io",

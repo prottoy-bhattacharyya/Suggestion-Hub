@@ -73,6 +73,7 @@ class Note(models.Model):
     processing_status = models.CharField(max_length=10, choices=[("processing","processing"),("ready","ready"),("failed","failed")], default="processing")
     rating_avg = models.DecimalField(max_digits=3, decimal_places=2)
     rating_count = models.PositiveIntegerField()
+    view_count = models.PositiveIntegerField(default=0)
     approved_at = models.DateTimeField(null=True)
     created_at = models.DateTimeField()
     class Meta:
@@ -106,6 +107,17 @@ class Rating(models.Model):
     class Meta:
         managed = False
         db_table = "ratings"
+
+class NoteDailyView(models.Model):
+    note = models.ForeignKey(Note, models.DO_NOTHING, db_column="note_id", related_name="+")
+    viewer = models.ForeignKey(HubUser, models.DO_NOTHING, db_column="viewer_id", related_name="+")
+    view_date = models.DateField()
+    created_at = models.DateTimeField()
+    class Meta:
+        managed = False
+        db_table = "note_daily_views"
+        ordering = ["-view_date"]
+        verbose_name_plural = "Note daily views"
 
 class Follow(models.Model):
     follower = models.ForeignKey(HubUser, models.DO_NOTHING, db_column="follower_id", related_name="+")

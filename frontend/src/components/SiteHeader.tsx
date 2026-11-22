@@ -1,5 +1,6 @@
 import { Link, useNavigate } from "@tanstack/react-router";
 import {
+  BarChart3,
   BookOpen,
   Home,
   LogOut,
@@ -65,9 +66,7 @@ export function SiteHeader() {
       await api.post(
         "/accounts/logout/",
         null,
-        csrfToken
-          ? { headers: { "X-CSRFToken": csrfToken } }
-          : undefined,
+        csrfToken ? { headers: { "X-CSRFToken": csrfToken } } : undefined,
       );
     } catch {
       // Session may already be gone server-side; still clear locally.
@@ -108,23 +107,21 @@ export function SiteHeader() {
         {/* Desktop nav */}
         <nav className="ml-2 hidden items-center gap-1 rounded-full bg-muted p-1 md:flex">
           {nav.map(({ to, label, Icon }) => (
-            <Link
-              key={to}
-              to={to}
-              className={linkBase}
-              activeProps={{ className: linkActive }}
-            >
+            <Link key={to} to={to} className={linkBase} activeProps={{ className: linkActive }}>
               <Icon className="h-3.5 w-3.5" />
               {label}
             </Link>
           ))}
 
+          {user && (
+            <Link to="/analytics" className={linkBase} activeProps={{ className: linkActive }}>
+              <BarChart3 className="h-3.5 w-3.5" />
+              Analytics
+            </Link>
+          )}
+
           {user?.role === "teacher" && (
-            <Link
-              to="/teacher"
-              className={linkBase}
-              activeProps={{ className: linkActive }}
-            >
+            <Link to="/teacher" className={linkBase} activeProps={{ className: linkActive }}>
               <ShieldCheck className="h-3.5 w-3.5" />
               Review
             </Link>
@@ -198,6 +195,18 @@ export function SiteHeader() {
                 {label}
               </Link>
             ))}
+
+            {user && (
+              <Link
+                to="/analytics"
+                onClick={() => setMenuOpen(false)}
+                className="flex items-center gap-3 rounded-xl px-4 py-2.5 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                activeProps={{ className: "bg-primary/10 text-primary" }}
+              >
+                <BarChart3 className="h-4 w-4" />
+                Analytics
+              </Link>
+            )}
 
             {user?.role === "teacher" && (
               <Link

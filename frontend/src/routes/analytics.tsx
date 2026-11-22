@@ -1,8 +1,18 @@
 import { createFileRoute, Link, redirect } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import {
-  BarChart3, BookOpen, CheckCircle2, Clock, FileText, LoaderCircle,
-  Star, TrendingUp, Upload, XCircle,
+  BarChart3,
+  BookOpen,
+  CheckCircle2,
+  Clock,
+  Eye,
+  FileText,
+  Film,
+  LoaderCircle,
+  Star,
+  TrendingUp,
+  Upload,
+  XCircle,
 } from "lucide-react";
 
 import api from "@/lib/api";
@@ -17,9 +27,18 @@ type AnalyticsNote = {
   rating_count: number;
   created_at: string;
   review_status: "pending" | "approved" | "rejected";
+  file_type?: "pdf" | "video";
+  view_count?: number;
 };
 
 type NotesResponse = { status: string; notes: AnalyticsNote[] };
+type DailyView = { date: string; pdf: number; video: number; total: number };
+type DailyViewsResponse = {
+  status: string;
+  total_views: number;
+  daily: DailyView[];
+};
+type AnalyticsRouteUser = { id: number; full_name: string; role: string };
 
 export const Route = createFileRoute("/analytics")({
   head: () => ({
@@ -31,9 +50,11 @@ export const Route = createFileRoute("/analytics")({
     ],
   }),
   beforeLoad: async () => {
-    const user = await getSessionUser().catch(() => null);
+    const user = await getSessionUser();
     if (!user) throw redirect({ to: "/login" });
-    return { user };
+    return {
+      user: { id: user.id, full_name: user.full_name, role: user.role },
+    };
   },
   component: Analytics,
 });
@@ -41,16 +62,20 @@ export const Route = createFileRoute("/analytics")({
 const num = (v: string | number) => Number(v) || 0;
 
 function Analytics() {
-  const { user } = Route.useRouteContext() as { user: { id: number; full_name: string } };
+  const { user } = Route.useRouteContext() as { user: AnalyticsRouteUser };
   const [notes, setNotes] = useState<AnalyticsNote[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [dailyViews, setDailyViews] = useState<DailyView[]>([]);
+  const [totalViews, setTotalViews] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
     (async () => {
       try {
-        const { data } = await api.get<NotesResponse>("/notes/get_notes/", { params: { user_id: user.id } });
+        const { data } = await api.get<NotesResponse>("/notes/get_notes/", {
+          params: { user_id: user.id },
+        });
         if (cancelled) return;
         if (data.status === "success") setNotes(data.notes);
         else setError("Unable to load analytics.");
@@ -60,20 +85,48 @@ function Analytics() {
         if (!cancelled) setLoading(false);
       }
     })();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
+  }, [user.id]);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const { data } = await api.get<DailyViewsResponse>("/notes/views/daily/", {
+          params: { days: 14 },
+        });
+        if (cancelled || data.status !== "success") return;
+        setDailyViews(data.daily);
+        setTotalViews(data.total_views);
+      } catch {
+        if (!cancelled) setDailyViews([]);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, [user.id]);
 
   const stats = useMemo(() => {
-    const by = (s: AnalyticsNote["review_status"]) => notes.filter((n) => n.review_status === s).length;
+    const by = (s: AnalyticsNote["review_status"]) =>
+      notes.filter((n) => n.review_status === s).length;
     const rated = notes.filter((n) => n.rating_count > 0);
     const totalRatings = rated.reduce((a, n) => a + n.rating_count, 0);
-    const avg = totalRatings ? rated.reduce((a, n) => a + num(n.rating_avg) * n.rating_count, 0) / totalRatings : 0;
+    const avg = totalRatings
+      ? rated.reduce((a, n) => a + num(n.rating_avg) * n.rating_count, 0) / totalRatings
+      : 0;
 
     const months: { key: string; label: string; count: number }[] = [];
     const now = new Date();
     for (let i = 5; i >= 0; i--) {
       const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-      months.push({ key: `${d.getFullYear()}-${d.getMonth()}`, label: d.toLocaleString("en", { month: "short" }), count: 0 });
+      months.push({
+        key: `${d.getFullYear()}-${d.getMonth()}`,
+        label: d.toLocaleString("en", { month: "short" }),
+        count: 0,
+      });
     }
     notes.forEach((n) => {
       const d = new Date(n.created_at);
@@ -82,21 +135,51 @@ function Analytics() {
     });
 
     const courses = new Map<string, number>();
-    notes.forEach((n) => { const c = n.course_code || "Other"; courses.set(c, (courses.get(c) ?? 0) + 1); });
+    notes.forEach((n) => {
+      const c = n.course_code || "Other";
+      courses.set(c, (courses.get(c) ?? 0) + 1);
+    });
     const topCourses = [...courses.entries()].sort((a, b) => b[1] - a[1]).slice(0, 5);
 
     const types = new Map<string, number>();
     notes.forEach((n) => types.set(n.type, (types.get(n.type) ?? 0) + 1));
 
-    const best = [...rated].sort((a, b) => num(b.rating_avg) - num(a.rating_avg) || b.rating_count - a.rating_count).slice(0, 5);
+    const best = [...rated]
+      .sort((a, b) => num(b.rating_avg) - num(a.rating_avg) || b.rating_count - a.rating_count)
+      .slice(0, 5);
 
-    return { approved: by("approved"), pending: by("pending"), rejected: by("rejected"), totalRatings, avg, months, topCourses, types: [...types.entries()], best };
+    const fileTypes = (["pdf", "video"] as const).map((key) => {
+      const items = notes.filter((n) => (n.file_type ?? "pdf") === key);
+      const ratedItems = items.filter((n) => n.rating_count > 0);
+      const ratings = ratedItems.reduce((a, n) => a + n.rating_count, 0);
+      const average = ratings
+        ? ratedItems.reduce((a, n) => a + num(n.rating_avg) * n.rating_count, 0) / ratings
+        : 0;
+      const top = [...ratedItems].sort(
+        (a, b) => num(b.rating_avg) - num(a.rating_avg) || b.rating_count - a.rating_count,
+      )[0];
+      return { key, count: items.length, ratings, average, top };
+    });
+
+    return {
+      approved: by("approved"),
+      pending: by("pending"),
+      rejected: by("rejected"),
+      totalRatings,
+      avg,
+      months,
+      topCourses,
+      types: [...types.entries()],
+      best,
+      fileTypes,
+    };
   }, [notes]);
 
   const total = notes.length;
   const approvalRate = total ? Math.round((stats.approved / total) * 100) : 0;
   const maxMonth = Math.max(1, ...stats.months.map((m) => m.count));
   const maxCourse = Math.max(1, ...stats.topCourses.map((c) => c[1]));
+  const maxDaily = Math.max(1, ...dailyViews.map((d) => d.total));
 
   return (
     <main className="mx-auto max-w-6xl px-5 py-10 sm:py-14">
@@ -105,9 +188,12 @@ function Analytics() {
         <span className="inline-flex items-center gap-1.5 rounded-full border border-border bg-background px-3 py-1 text-xs font-medium text-muted-foreground">
           <BarChart3 size={14} /> Analytics
         </span>
-        <h1 className="mt-4 text-3xl font-semibold tracking-tight sm:text-4xl">How your uploads are doing</h1>
+        <h1 className="mt-4 text-3xl font-semibold tracking-tight sm:text-4xl">
+          How your uploads are doing
+        </h1>
         <p className="mt-2 max-w-xl text-muted-foreground">
-          Reviews, ratings and activity for everything you've shared, {user.full_name.split(" ")[0]}.
+          Reviews, ratings and activity for everything you've shared, {user.full_name.split(" ")[0]}
+          .
         </p>
       </header>
 
@@ -116,30 +202,121 @@ function Analytics() {
           <LoaderCircle className="animate-spin" size={20} /> Loading analytics…
         </div>
       ) : error ? (
-        <p className="mt-8 rounded-2xl border border-destructive/30 bg-destructive/5 p-5 text-sm text-destructive">{error}</p>
+        <p className="mt-8 rounded-2xl border border-destructive/30 bg-destructive/5 p-5 text-sm text-destructive">
+          {error}
+        </p>
       ) : total === 0 ? (
         <div className="mt-8 rounded-3xl border border-dashed border-border p-14 text-center">
           <Upload className="mx-auto text-muted-foreground" size={32} />
           <h2 className="mt-4 text-lg font-semibold">No uploads yet</h2>
-          <p className="mt-1 text-sm text-muted-foreground">Share your first note to start seeing analytics.</p>
-          <Link to="/upload" className="mt-6 inline-flex rounded-full bg-primary px-5 py-2.5 text-sm font-medium text-primary-foreground hover:bg-primary/90">Upload a file</Link>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Share your first note to start seeing analytics.
+          </p>
+          <Link
+            to="/upload"
+            className="mt-6 inline-flex rounded-full bg-primary px-5 py-2.5 text-sm font-medium text-primary-foreground hover:bg-primary/90"
+          >
+            Upload a file
+          </Link>
         </div>
       ) : (
         <>
-          <section className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            <Kpi icon={<FileText size={18} />} label="Total uploads" value={total} hint={`${stats.months.at(-1)?.count ?? 0} this month`} />
-            <Kpi icon={<CheckCircle2 size={18} />} label="Approval rate" value={`${approvalRate}%`} hint={`${stats.approved} approved`} />
-            <Kpi icon={<Star size={18} />} label="Average rating" value={stats.avg ? stats.avg.toFixed(1) : "—"} hint={`${stats.totalRatings} ratings`} />
-            <Kpi icon={<Clock size={18} />} label="Waiting review" value={stats.pending} hint={`${stats.rejected} rejected`} />
+          <section className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+            <Kpi
+              icon={<FileText size={18} />}
+              label="Total uploads"
+              value={total}
+              hint={`${stats.months.at(-1)?.count ?? 0} this month`}
+            />
+            <Kpi
+              icon={<CheckCircle2 size={18} />}
+              label="Approval rate"
+              value={`${approvalRate}%`}
+              hint={`${stats.approved} approved`}
+            />
+            <Kpi
+              icon={<Star size={18} />}
+              label="Average rating"
+              value={stats.avg ? stats.avg.toFixed(1) : "—"}
+              hint={`${stats.totalRatings} ratings`}
+            />
+            <Kpi
+              icon={<Eye size={18} />}
+              label="Total views"
+              value={totalViews}
+              hint="Unique logged-in views"
+            />
+            <Kpi
+              icon={<Clock size={18} />}
+              label="Waiting review"
+              value={stats.pending}
+              hint={`${stats.rejected} rejected`}
+            />
+          </section>
+
+          <section className="mt-6 grid gap-4 sm:grid-cols-2">
+            {stats.fileTypes.map(({ key, count, ratings, average, top }) => {
+              const Icon = key === "pdf" ? FileText : Film;
+              return (
+                <div key={key} className="rounded-3xl border border-border bg-card p-6">
+                  <div className="flex items-center justify-between gap-3">
+                    <h2 className="flex items-center gap-2 text-sm font-semibold">
+                      <Icon size={16} /> {key === "pdf" ? "PDF performance" : "Video performance"}
+                    </h2>
+                    <span className="rounded-full bg-muted px-3 py-1 text-xs text-muted-foreground">
+                      {count} upload{count === 1 ? "" : "s"}
+                    </span>
+                  </div>
+
+                  <div className="mt-5 flex items-end gap-8">
+                    <div>
+                      <p className="text-3xl font-semibold tabular-nums">
+                        {average ? average.toFixed(1) : "—"}
+                      </p>
+                      <p className="text-xs text-muted-foreground">Average rating</p>
+                    </div>
+                    <div>
+                      <p className="text-3xl font-semibold tabular-nums">{ratings}</p>
+                      <p className="text-xs text-muted-foreground">Total ratings</p>
+                    </div>
+                  </div>
+
+                  <div className="mt-5 border-t border-border pt-4 text-sm">
+                    {top ? (
+                      <Link
+                        to="/pdf/$id"
+                        params={{ id: String(top.id) }}
+                        className="flex items-center gap-2 hover:opacity-80"
+                      >
+                        <span className="min-w-0 flex-1 truncate font-medium">{top.title}</span>
+                        <span className="flex items-center gap-1 tabular-nums">
+                          <Star size={14} className="fill-current" />
+                          {num(top.rating_avg).toFixed(1)}
+                        </span>
+                      </Link>
+                    ) : (
+                      <p className="text-muted-foreground">No ratings yet.</p>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
           </section>
 
           <section className="mt-6 grid gap-6 lg:grid-cols-3">
-            <Card title="Uploads over 6 months" icon={<TrendingUp size={16} />} className="lg:col-span-2">
+            <Card
+              title="Uploads over 6 months"
+              icon={<TrendingUp size={16} />}
+              className="lg:col-span-2"
+            >
               <div className="flex h-52 items-end gap-3">
                 {stats.months.map((m) => (
                   <div key={m.key} className="flex flex-1 flex-col items-center gap-2">
                     <span className="text-xs font-medium tabular-nums">{m.count}</span>
-                    <div className="w-full rounded-t-xl bg-primary/80 transition-all" style={{ height: `${(m.count / maxMonth) * 100}%`, minHeight: 4 }} />
+                    <div
+                      className="w-full rounded-t-xl bg-primary/80 transition-all"
+                      style={{ height: `${(m.count / maxMonth) * 100}%`, minHeight: 4 }}
+                    />
                     <span className="text-xs text-muted-foreground">{m.label}</span>
                   </div>
                 ))}
@@ -148,23 +325,95 @@ function Analytics() {
 
             <Card title="Review status" icon={<CheckCircle2 size={16} />}>
               <div className="flex h-3 overflow-hidden rounded-full bg-muted">
-                <div className="bg-primary" style={{ width: `${(stats.approved / total) * 100}%` }} />
-                <div className="bg-muted-foreground/50" style={{ width: `${(stats.pending / total) * 100}%` }} />
-                <div className="bg-destructive" style={{ width: `${(stats.rejected / total) * 100}%` }} />
+                <div
+                  className="bg-primary"
+                  style={{ width: `${(stats.approved / total) * 100}%` }}
+                />
+                <div
+                  className="bg-muted-foreground/50"
+                  style={{ width: `${(stats.pending / total) * 100}%` }}
+                />
+                <div
+                  className="bg-destructive"
+                  style={{ width: `${(stats.rejected / total) * 100}%` }}
+                />
               </div>
               <ul className="mt-5 space-y-3 text-sm">
-                <Row icon={<CheckCircle2 size={15} className="text-primary" />} label="Approved" value={stats.approved} />
-                <Row icon={<Clock size={15} className="text-muted-foreground" />} label="Pending" value={stats.pending} />
-                <Row icon={<XCircle size={15} className="text-destructive" />} label="Rejected" value={stats.rejected} />
+                <Row
+                  icon={<CheckCircle2 size={15} className="text-primary" />}
+                  label="Approved"
+                  value={stats.approved}
+                />
+                <Row
+                  icon={<Clock size={15} className="text-muted-foreground" />}
+                  label="Pending"
+                  value={stats.pending}
+                />
+                <Row
+                  icon={<XCircle size={15} className="text-destructive" />}
+                  label="Rejected"
+                  value={stats.rejected}
+                />
               </ul>
               <div className="mt-6 border-t border-border pt-4">
-                <p className="mb-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">By type</p>
+                <p className="mb-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                  By category
+                </p>
                 <div className="flex flex-wrap gap-2">
                   {stats.types.map(([t, c]) => (
-                    <span key={t} className="rounded-full border border-border px-3 py-1 text-xs capitalize">{t} · {c}</span>
+                    <span
+                      key={t}
+                      className="rounded-full border border-border px-3 py-1 text-xs capitalize"
+                    >
+                      {t} · {c}
+                    </span>
                   ))}
                 </div>
               </div>
+            </Card>
+          </section>
+
+          <section className="mt-6">
+            <Card title="Views per day (last 14 days)" icon={<Eye size={16} />}>
+              {dailyViews.length === 0 ? (
+                <p className="text-sm text-muted-foreground">No views yet.</p>
+              ) : (
+                <>
+                  <div className="flex h-52 items-end gap-2 overflow-x-auto pb-1">
+                    {dailyViews.map((day) => (
+                      <div
+                        key={day.date}
+                        className="flex min-w-[28px] flex-1 flex-col items-center gap-1"
+                      >
+                        <span className="text-[10px] font-medium tabular-nums">{day.total}</span>
+                        <div className="flex h-32 w-full items-end">
+                          <div
+                            className="w-1/2 rounded-l bg-primary/80"
+                            style={{ height: `${(day.pdf / maxDaily) * 100}%` }}
+                            title={`${day.pdf} PDF views`}
+                          />
+                          <div
+                            className="w-1/2 rounded-r bg-muted-foreground/50"
+                            style={{ height: `${(day.video / maxDaily) * 100}%` }}
+                            title={`${day.video} video views`}
+                          />
+                        </div>
+                        <span className="text-[10px] text-muted-foreground">
+                          {day.date.slice(5)}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="mt-3 flex gap-4 text-xs text-muted-foreground">
+                    <span className="flex items-center gap-1.5">
+                      <span className="h-2 w-2 rounded-full bg-primary/80" /> PDF
+                    </span>
+                    <span className="flex items-center gap-1.5">
+                      <span className="h-2 w-2 rounded-full bg-muted-foreground/50" /> Video
+                    </span>
+                  </div>
+                </>
+              )}
             </Card>
           </section>
 
@@ -173,8 +422,16 @@ function Analytics() {
               <ul className="space-y-4">
                 {stats.topCourses.map(([c, n]) => (
                   <li key={c}>
-                    <div className="mb-1.5 flex justify-between text-sm"><span className="font-medium">{c}</span><span className="tabular-nums text-muted-foreground">{n}</span></div>
-                    <div className="h-2 rounded-full bg-muted"><div className="h-2 rounded-full bg-primary" style={{ width: `${(n / maxCourse) * 100}%` }} /></div>
+                    <div className="mb-1.5 flex justify-between text-sm">
+                      <span className="font-medium">{c}</span>
+                      <span className="tabular-nums text-muted-foreground">{n}</span>
+                    </div>
+                    <div className="h-2 rounded-full bg-muted">
+                      <div
+                        className="h-2 rounded-full bg-primary"
+                        style={{ width: `${(n / maxCourse) * 100}%` }}
+                      />
+                    </div>
                   </li>
                 ))}
               </ul>
@@ -187,10 +444,21 @@ function Analytics() {
                 <ol className="divide-y divide-border">
                   {stats.best.map((n, i) => (
                     <li key={n.id}>
-                      <Link to="/notes/$id" params={{ id: String(n.id) }} className="flex items-center gap-3 py-3 hover:opacity-80">
-                        <span className="grid h-7 w-7 place-items-center rounded-full bg-muted text-xs font-semibold">{i + 1}</span>
-                        <span className="min-w-0 flex-1 truncate text-sm font-medium">{n.title}</span>
-                        <span className="flex items-center gap-1 text-sm tabular-nums"><Star size={14} className="fill-current" />{num(n.rating_avg).toFixed(1)}</span>
+                      <Link
+                        to="/pdf/$id"
+                        params={{ id: String(n.id) }}
+                        className="flex items-center gap-3 py-3 hover:opacity-80"
+                      >
+                        <span className="grid h-7 w-7 place-items-center rounded-full bg-muted text-xs font-semibold">
+                          {i + 1}
+                        </span>
+                        <span className="min-w-0 flex-1 truncate text-sm font-medium">
+                          {n.title}
+                        </span>
+                        <span className="flex items-center gap-1 text-sm tabular-nums">
+                          <Star size={14} className="fill-current" />
+                          {num(n.rating_avg).toFixed(1)}
+                        </span>
                         <span className="text-xs text-muted-foreground">({n.rating_count})</span>
                       </Link>
                     </li>
@@ -205,25 +473,61 @@ function Analytics() {
   );
 }
 
-function Kpi({ icon, label, value, hint }: { icon: React.ReactNode; label: string; value: React.ReactNode; hint: string }) {
+function Kpi({
+  icon,
+  label,
+  value,
+  hint,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  value: React.ReactNode;
+  hint: string;
+}) {
   return (
     <div className="rounded-2xl border border-border bg-card p-5 transition hover:-translate-y-0.5 hover:shadow-lg">
-      <div className="flex items-center gap-2 text-sm text-muted-foreground"><span className="grid h-8 w-8 place-items-center rounded-xl bg-muted text-foreground">{icon}</span>{label}</div>
+      <div className="flex items-center gap-2 text-sm text-muted-foreground">
+        <span className="grid h-8 w-8 place-items-center rounded-xl bg-muted text-foreground">
+          {icon}
+        </span>
+        {label}
+      </div>
       <p className="mt-4 text-3xl font-semibold tabular-nums tracking-tight">{value}</p>
       <p className="mt-1 text-xs text-muted-foreground">{hint}</p>
     </div>
   );
 }
 
-function Card({ title, icon, children, className = "" }: { title: string; icon: React.ReactNode; children: React.ReactNode; className?: string }) {
+function Card({
+  title,
+  icon,
+  children,
+  className = "",
+}: {
+  title: string;
+  icon: React.ReactNode;
+  children: React.ReactNode;
+  className?: string;
+}) {
   return (
     <div className={`rounded-3xl border border-border bg-card p-6 ${className}`}>
-      <h2 className="mb-5 flex items-center gap-2 text-sm font-semibold">{icon}{title}</h2>
+      <h2 className="mb-5 flex items-center gap-2 text-sm font-semibold">
+        {icon}
+        {title}
+      </h2>
       {children}
     </div>
   );
 }
 
 function Row({ icon, label, value }: { icon: React.ReactNode; label: string; value: number }) {
-  return <li className="flex items-center justify-between"><span className="flex items-center gap-2">{icon}{label}</span><span className="font-medium tabular-nums">{value}</span></li>;
+  return (
+    <li className="flex items-center justify-between">
+      <span className="flex items-center gap-2">
+        {icon}
+        {label}
+      </span>
+      <span className="font-medium tabular-nums">{value}</span>
+    </li>
+  );
 }

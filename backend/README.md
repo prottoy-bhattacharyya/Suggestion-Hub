@@ -784,6 +784,8 @@ Content-Range: bytes */<file-size>
     "section": "A",
     "rating_avg": "4.50",
     "rating_count": 2,
+    "view_count": 42,
+    "views_today": 3,
     "created_at": "2026-11-21T10:30:00",
     "review_status": "approved",
     "uploader_id": 3,
@@ -954,6 +956,76 @@ Content-Range: bytes */<file-size>
 {
   "status": "error",
   "error": "Note not found"
+}
+```
+
+---
+
+### 17a. Record a view
+
+- **Url:** `/notes/<note_id>/view/`
+- **Request type:** `POST`
+- **Request parameters:** Path `note_id` (integer, required).
+- **Request body:** `application/json`; an empty object `{}` is fine.
+- **Auth:** login session plus `X-CSRFToken` header.
+- **Behavior:** Counts one unique view per logged-in viewer per note per server day. Owner self-views and non-approved notes are not counted. Repeating the request on the same day is idempotent.
+
+`200 OK`:
+
+```json
+{
+  "status": "success",
+  "counted": true,
+  "view_count": 42,
+  "views_today": 3
+}
+```
+
+When nothing is counted, `counted` is `false` and `reason` is `owner`, `not_approved`, or `duplicate`.
+
+`401 Unauthorized`, `403 Forbidden`, `404 Not Found`, and `405 Method Not Allowed` follow the same shapes as the rate endpoint.
+
+---
+
+### 17b. Note view history
+
+- **Url:** `/notes/<note_id>/views/daily/`
+- **Request type:** `GET`
+- **Request parameters:** Path `note_id`; query `days` (integer, 1-365, default `30`).
+- **Request body:** None
+- **Auth:** note uploader, teacher, or admin only.
+
+`200 OK`:
+
+```json
+{
+  "status": "success",
+  "note_id": 10,
+  "file_type": "pdf",
+  "total_views": 42,
+  "daily": [{ "date": "2026-11-23", "views": 3 }]
+}
+```
+
+---
+
+### 17c. Daily views for your uploads
+
+- **Url:** `/notes/views/daily/`
+- **Request type:** `GET`
+- **Request parameters:** Query `days` (integer, 1-365, default `30`).
+- **Request body:** None
+- **Auth:** login session; only the logged-in uploader's own aggregates are returned.
+
+`200 OK`:
+
+```json
+{
+  "status": "success",
+  "total_views": 123,
+  "daily": [
+    { "date": "2026-11-23", "pdf": 5, "video": 2, "total": 7 }
+  ]
 }
 ```
 

@@ -3,6 +3,7 @@ import os
 import re
 import hashlib
 import shutil
+from datetime import date, timedelta
 from pathlib import Path
 
 from django.conf import settings
@@ -429,7 +430,7 @@ def get_notes(request):
                 n.id, n.title, n.description, n.type, n.intake, n.section,
                 n.rating_avg, n.rating_count, n.created_at, n.review_status,
                 u.full_name as uploader_name, r.comment as review_comment,
-                n.file_type
+                n.file_type, n.view_count
             from notes n
             left join users u on n.uploader_id = u.id
             left join reviews r on n.id = r.note_id
@@ -461,6 +462,7 @@ def get_notes(request):
                     'uploader_name': note[10],
                     'review_comment': note[11],
                     'file_type': note[12],
+                    'view_count': note[13],
                     'file_url': request.build_absolute_uri(
                         f"/notes/{note[0]}/file/"
                     ),
@@ -502,7 +504,7 @@ def note_detail(request, note_id):
             SELECT n.id, n.title, n.description, n.type, n.intake, n.section,
                    n.rating_avg, n.rating_count, n.created_at, n.review_status,
                    n.uploader_id, u.full_name AS uploader_name,
-                   c.code AS course_code, n.file_type
+                    c.code AS course_code, n.file_type, n.view_count
             FROM notes n
             LEFT JOIN users u ON n.uploader_id = u.id
             LEFT JOIN courses c ON n.course_id = c.id
@@ -521,7 +523,7 @@ def note_detail(request, note_id):
     (
         id_, title, description, type_, intake, section,
         rating_avg, rating_count, created_at, review_status,
-        uploader_id, uploader_name, course_code, file_type,
+        uploader_id, uploader_name, course_code, file_type, view_count,
     ) = row
 
     # Pending notes are only visible to their uploader, teachers and admins.
@@ -539,6 +541,7 @@ def note_detail(request, note_id):
     viewer_id = session_user.get('id')
 
     my_rating = 0
+    views_today = 0
     my_rating_conn = get_db_connection()
     try:
         with my_rating_conn.cursor() as c2:
@@ -548,6 +551,15 @@ def note_detail(request, note_id):
             )
             stars_row = c2.fetchone()
             my_rating = int(stars_row[0]) if stars_row else 0
+
+            c2.execute(
+                """
+                SELECT COUNT(*) FROM note_daily_views
+                WHERE note_id = %s AND view_date = CURDATE()
+                """,
+                (note_id,),
+            )
+            views_today = int(c2.fetchone()[0] or 0)
     finally:
         my_rating_conn.close()
 
@@ -563,6 +575,8 @@ def note_detail(request, note_id):
                 'section': section,
                 'rating_avg': str(rating_avg),
                 'rating_count': rating_count,
+                'view_count': int(view_count or 0),
+                'views_today': views_today,
                 'created_at': created_at.isoformat() if created_at else None,
                 'review_status': review_status,
                 'uploader_id': uploader_id,
@@ -574,6 +588,232 @@ def note_detail(request, note_id):
                 'file_url': request.build_absolute_uri(f"/notes/{id_}/file/"),
             },
         },
+        status=200,
+    )
+
+
+def _parse_days(request):
+    try:
+        days = int(request.GET.get("days", 30))
+    except (TypeError, ValueError):
+        return None
+    return max(1, min(days, 365))
+
+
+def note_view(request, note_id):
+    if request.method != "POST":
+        return JsonResponse({'status': 'error', 'error': 'Invalid request method'}, status=405)
+
+    session_user = _get_session_user(request)
+    if not session_user:
+        return JsonResponse(
+            {"status": "failed", "error": "You need to login first."},
+            status=401,
+        )
+
+    viewer_id = session_user.get("id")
+    conn = get_db_connection()
+    try:
+        with conn.cursor() as cursor:
+            cursor.execute(
+                "SELECT uploader_id, review_status, view_count FROM notes WHERE id = %s",
+                (note_id,),
+            )
+            row = cursor.fetchone()
+            if row is None:
+                return JsonResponse({'status': 'error', 'error': 'Note not found'}, status=404)
+
+            uploader_id, review_status, view_count = row
+            is_owner = viewer_id == uploader_id
+            is_staff = session_user.get("role") in ("teacher", "admin")
+            counted = False
+            reason = None
+
+            if review_status != "approved" and not is_owner and not is_staff:
+                return JsonResponse(
+                    {'status': 'error', 'error': 'You cannot view this note yet.'},
+                    status=403,
+                )
+
+            if is_owner:
+                reason = "owner"
+            elif review_status != "approved":
+                reason = "not_approved"
+            else:
+                cursor.execute(
+                    """
+                    INSERT IGNORE INTO note_daily_views (note_id, viewer_id, view_date)
+                    VALUES (%s, %s, CURDATE())
+                    """,
+                    (note_id, viewer_id),
+                )
+                counted = cursor.rowcount == 1
+                if counted:
+                    cursor.execute(
+                        "SELECT COUNT(*) FROM note_daily_views WHERE note_id = %s",
+                        (note_id,),
+                    )
+                    view_count = int(cursor.fetchone()[0] or 0)
+                    cursor.execute(
+                        "UPDATE notes SET view_count = %s WHERE id = %s",
+                        (view_count, note_id),
+                    )
+                    conn.commit()
+                else:
+                    reason = "duplicate"
+
+            cursor.execute(
+                """
+                SELECT COUNT(*) FROM note_daily_views
+                WHERE note_id = %s AND view_date = CURDATE()
+                """,
+                (note_id,),
+            )
+            views_today = int(cursor.fetchone()[0] or 0)
+    except Exception as e:
+        conn.rollback()
+        return JsonResponse({'status': 'error', 'error': str(e)}, status=500)
+    finally:
+        conn.close()
+
+    response = {
+        'status': 'success',
+        'counted': counted,
+        'view_count': int(view_count or 0),
+        'views_today': views_today,
+    }
+    if reason:
+        response['reason'] = reason
+    return JsonResponse(response, status=200)
+
+
+def note_view_history(request, note_id):
+    if request.method != "GET":
+        return JsonResponse({'status': 'error', 'error': 'Invalid request method'}, status=405)
+
+    session_user = _get_session_user(request)
+    if not session_user:
+        return JsonResponse(
+            {"status": "failed", "error": "You need to login first."},
+            status=401,
+        )
+
+    days = _parse_days(request)
+    if days is None:
+        return JsonResponse({'status': 'error', 'error': 'days must be an integer'}, status=400)
+
+    viewer_id = session_user.get("id")
+    conn = get_db_connection()
+    try:
+        with conn.cursor() as cursor:
+            cursor.execute(
+                "SELECT uploader_id, file_type, view_count FROM notes WHERE id = %s",
+                (note_id,),
+            )
+            row = cursor.fetchone()
+            if row is None:
+                return JsonResponse({'status': 'error', 'error': 'Note not found'}, status=404)
+
+            uploader_id, file_type, view_count = row
+            if viewer_id != uploader_id and session_user.get("role") not in ("teacher", "admin"):
+                return JsonResponse(
+                    {'status': 'error', 'error': 'You cannot view this history.'},
+                    status=403,
+                )
+
+            start_date = (date.today() - timedelta(days=days - 1)).isoformat()
+            cursor.execute(
+                """
+                SELECT view_date, COUNT(*) FROM note_daily_views
+                WHERE note_id = %s AND view_date >= %s
+                GROUP BY view_date ORDER BY view_date
+                """,
+                (note_id, start_date),
+            )
+            counts = {view_date: int(total or 0) for view_date, total in cursor.fetchall()}
+    finally:
+        conn.close()
+
+    daily = []
+    for offset in range(days - 1, -1, -1):
+        day = date.today() - timedelta(days=offset)
+        daily.append({'date': day.isoformat(), 'views': counts.get(day, 0)})
+
+    return JsonResponse(
+        {
+            'status': 'success',
+            'note_id': note_id,
+            'file_type': file_type,
+            'total_views': int(view_count or 0),
+            'daily': daily,
+        },
+        status=200,
+    )
+
+
+def note_views_daily(request):
+    if request.method != "GET":
+        return JsonResponse({'status': 'error', 'error': 'Invalid request method'}, status=405)
+
+    session_user = _get_session_user(request)
+    if not session_user:
+        return JsonResponse(
+            {"status": "failed", "error": "You need to login first."},
+            status=401,
+        )
+
+    days = _parse_days(request)
+    if days is None:
+        return JsonResponse({'status': 'error', 'error': 'days must be an integer'}, status=400)
+
+    viewer_id = session_user.get("id")
+    conn = get_db_connection()
+    try:
+        with conn.cursor() as cursor:
+            start_date = (date.today() - timedelta(days=days - 1)).isoformat()
+            cursor.execute(
+                """
+                SELECT v.view_date,
+                       SUM(CASE WHEN n.file_type = 'pdf' THEN 1 ELSE 0 END),
+                       SUM(CASE WHEN n.file_type = 'video' THEN 1 ELSE 0 END)
+                FROM note_daily_views v
+                JOIN notes n ON n.id = v.note_id
+                WHERE n.uploader_id = %s AND v.view_date >= %s
+                GROUP BY v.view_date ORDER BY v.view_date
+                """,
+                (viewer_id, start_date),
+            )
+            counts = {}
+            for view_date, pdf_views, video_views in cursor.fetchall():
+                counts[view_date] = {
+                    'pdf': int(pdf_views or 0),
+                    'video': int(video_views or 0),
+                }
+
+            cursor.execute(
+                "SELECT COALESCE(SUM(view_count), 0) FROM notes WHERE uploader_id = %s",
+                (viewer_id,),
+            )
+            total_views = int(cursor.fetchone()[0] or 0)
+    finally:
+        conn.close()
+
+    daily = []
+    for offset in range(days - 1, -1, -1):
+        day = date.today() - timedelta(days=offset)
+        pdf_views = counts.get(day, {}).get('pdf', 0)
+        video_views = counts.get(day, {}).get('video', 0)
+        daily.append(
+            {
+                'date': day.isoformat(),
+                'pdf': pdf_views,
+                'video': video_views,
+                'total': pdf_views + video_views,
+            }
+        )
+
+    return JsonResponse(
+        {'status': 'success', 'total_views': total_views, 'daily': daily},
         status=200,
     )
 

@@ -613,7 +613,7 @@ function Signup() {
     const el = e.target as HTMLElement;
     if (!["INPUT", "SELECT", "TEXTAREA", "BUTTON"].includes(el.tagName)) return;
 
-    setFocusId(el.dataset.for ?? el.id);
+    setFocusId(el.dataset["for"] ?? el.id);
     aimAtField(el);
   }
 

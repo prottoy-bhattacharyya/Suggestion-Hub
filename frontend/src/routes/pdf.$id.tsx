@@ -7,6 +7,7 @@ import {
   CheckCircle2,
   Download,
   ExternalLink,
+  Eye,
   Flag,
   GraduationCap,
   LoaderCircle,
@@ -71,6 +72,8 @@ type NoteDetail = {
   section: string | null;
   rating_avg: string;
   rating_count: number;
+  view_count: number;
+  views_today: number;
   created_at: string | null;
   review_status: "pending" | "approved" | "rejected";
   uploader_id: number;
@@ -81,6 +84,37 @@ type NoteDetail = {
   file_url: string;
   file_type?: "pdf" | "video";
 };
+
+type ViewResponse = {
+  status: string;
+  counted: boolean;
+  view_count: number;
+  views_today: number;
+  reason?: string;
+};
+
+const viewRequests = new Map<number, Promise<ViewResponse | null>>();
+
+async function recordView(noteId: number): Promise<ViewResponse | null> {
+  try {
+    const csrfToken = await getCSRFToken();
+    const { data } = await api.post<ViewResponse>(
+      `/notes/${noteId}/view/`,
+      {},
+      {
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+          ...(csrfToken ? { "X-CSRFToken": csrfToken } : {}),
+        },
+      },
+    );
+    return data.status === "success" ? data : null;
+  } catch (error) {
+    console.error("View tracking failed:", error);
+    return null;
+  }
+}
 
 type Comment = {
   id: number;
@@ -181,7 +215,10 @@ function MarkdownText({ text }: { text: string }) {
         index++;
       }
       blocks.push(
-        <ol key={`numbers-${index}`} className="my-2 list-decimal space-y-1 pl-5 marker:font-semibold marker:text-primary">
+        <ol
+          key={`numbers-${index}`}
+          className="my-2 list-decimal space-y-1 pl-5 marker:font-semibold marker:text-primary"
+        >
           {items.map((item, itemIndex) => (
             <li key={itemIndex}>{renderInlineMarkdown(item)}</li>
           ))}
@@ -326,7 +363,6 @@ function CommentsSection({ noteId }: { noteId: number }) {
             <MessageCircle className="h-5 w-5 text-primary" />
             <h2 className="text-xl font-semibold tracking-tight">Comments</h2>
           </div>
-
 
           <p className="mt-1 text-sm text-muted-foreground">
             Discuss this material, ask questions, and help other students.
@@ -479,6 +515,8 @@ function PdfPage() {
   const [ratingAvg, setRatingAvg] = useState(note.rating_avg);
   const [ratingCount, setRatingCount] = useState(note.rating_count);
   const [myRating, setMyRating] = useState(note.my_rating);
+  const [viewCount, setViewCount] = useState(note.view_count ?? 0);
+  const [viewsToday, setViewsToday] = useState(note.views_today ?? 0);
   const [hoverRating, setHoverRating] = useState(0);
   const [ratingLoading, setRatingLoading] = useState(false);
   const [ratingError, setRatingError] = useState("");
@@ -493,6 +531,26 @@ function PdfPage() {
   const [aiQuestion, setAiQuestion] = useState("");
   const [aiLoading, setAiLoading] = useState(false);
   const [aiMessages, setAiMessages] = useState<AiMessage[]>([]);
+
+  useEffect(() => {
+    setViewCount(note.view_count ?? 0);
+    setViewsToday(note.views_today ?? 0);
+  }, [note.id, note.view_count, note.views_today]);
+
+  useEffect(() => {
+    let active = true;
+    if (!viewRequests.has(note.id)) {
+      viewRequests.set(note.id, recordView(note.id));
+    }
+    viewRequests.get(note.id)?.then((data) => {
+      if (!active || !data) return;
+      setViewCount(data.view_count);
+      setViewsToday(data.views_today);
+    });
+    return () => {
+      active = false;
+    };
+  }, [note.id]);
 
   useEffect(() => {
     if (!aiOpen) return;
@@ -682,6 +740,7 @@ function PdfPage() {
     { icon: GraduationCap, label: "Intake", value: note.intake },
     { icon: Users, label: "Section", value: note.section },
     { icon: CalendarDays, label: "Uploaded", value: formattedDate },
+    { icon: Eye, label: "Views", value: viewCount.toLocaleString() },
   ].filter((m) => m.value);
 
   return (
@@ -814,6 +873,10 @@ function PdfPage() {
                     ? `${ratingCount} rating${ratingCount === 1 ? "" : "s"}`
                     : "No ratings yet"}
                 </p>
+                <p className="mt-0.5 text-xs text-muted-foreground">
+                  {viewCount.toLocaleString()} view{viewCount === 1 ? "" : "s"}
+                  {viewsToday > 0 ? ` · ${viewsToday} today` : ""}
+                </p>
               </div>
             </div>
 
@@ -873,7 +936,12 @@ function PdfPage() {
 
           {/* Ask AI panel */}
           {note.file_type !== "video" && aiOpen && (
-            <div className="fixed inset-0 z-[70] flex justify-end bg-slate-950/25 backdrop-blur-[2px]" role="dialog" aria-modal="true" aria-label="Ask AI about this PDF">
+            <div
+              className="fixed inset-0 z-[70] flex justify-end bg-slate-950/25 backdrop-blur-[2px]"
+              role="dialog"
+              aria-modal="true"
+              aria-label="Ask AI about this PDF"
+            >
               <button
                 type="button"
                 className="absolute inset-0 cursor-default"
@@ -891,102 +959,142 @@ function PdfPage() {
                       </span>
                       <div>
                         <p className="text-base font-semibold tracking-tight">Ask AI</p>
-                        <p className="mt-0.5 text-xs text-muted-foreground">Answers from this PDF</p>
+                        <p className="mt-0.5 text-xs text-muted-foreground">
+                          Answers from this PDF
+                        </p>
                       </div>
                     </div>
                     <div className="flex items-center gap-1">
                       {aiMessages.length > 0 && (
-                        <button type="button" onClick={() => setAiMessages([])} className="grid h-9 w-9 place-items-center rounded-full text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground" aria-label="Clear AI chat" title="Clear chat">
+                        <button
+                          type="button"
+                          onClick={() => setAiMessages([])}
+                          className="grid h-9 w-9 place-items-center rounded-full text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
+                          aria-label="Clear AI chat"
+                          title="Clear chat"
+                        >
                           <RotateCcw className="h-4 w-4" />
                         </button>
                       )}
-                      <button type="button" onClick={() => setAiOpen(false)} className="grid h-9 w-9 place-items-center rounded-full text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground" aria-label="Close Ask AI">
+                      <button
+                        type="button"
+                        onClick={() => setAiOpen(false)}
+                        className="grid h-9 w-9 place-items-center rounded-full text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
+                        aria-label="Close Ask AI"
+                      >
                         <X className="h-5 w-5" />
                       </button>
                     </div>
                   </div>
                 </div>
 
-              {aiMessages.length === 0 ? (
-                <div className="flex-1 overflow-y-auto px-6 py-8">
-                  <div className="mx-auto max-w-sm text-center">
-                    <span className="mx-auto grid h-14 w-14 place-items-center rounded-2xl bg-primary/10 text-primary shadow-lg shadow-primary/10">
-                      <Bot className="h-7 w-7" />
-                    </span>
-                    <h2 className="mt-4 text-xl font-semibold tracking-tight">What would you like to know?</h2>
-                    <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
-                      Ask a question about “{note.title}” and get a PDF-aware answer.
-                    </p>
+                {aiMessages.length === 0 ? (
+                  <div className="flex-1 overflow-y-auto px-6 py-8">
+                    <div className="mx-auto max-w-sm text-center">
+                      <span className="mx-auto grid h-14 w-14 place-items-center rounded-2xl bg-primary/10 text-primary shadow-lg shadow-primary/10">
+                        <Bot className="h-7 w-7" />
+                      </span>
+                      <h2 className="mt-4 text-xl font-semibold tracking-tight">
+                        What would you like to know?
+                      </h2>
+                      <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
+                        Ask a question about “{note.title}” and get a PDF-aware answer.
+                      </p>
+                    </div>
+                    <div className="mt-7 grid gap-2.5">
+                      {[
+                        "Summarize this PDF",
+                        "What are the key points?",
+                        "Give me likely exam questions",
+                      ].map((question) => (
+                        <button
+                          key={question}
+                          type="button"
+                          onClick={() => askSuggestedQuestion(question)}
+                          className="group flex items-center justify-between rounded-2xl border border-border/70 bg-background px-4 py-3.5 text-left text-sm font-medium transition-all hover:-translate-y-0.5 hover:border-primary/30 hover:bg-primary/5 hover:shadow-md"
+                        >
+                          <span>{question}</span>
+                          <ArrowRight className="h-4 w-4 text-muted-foreground transition-transform group-hover:translate-x-1 group-hover:text-primary" />
+                        </button>
+                      ))}
+                    </div>
                   </div>
-                  <div className="mt-7 grid gap-2.5">
-                    {["Summarize this PDF", "What are the key points?", "Give me likely exam questions"].map((question) => (
-                      <button key={question} type="button" onClick={() => askSuggestedQuestion(question)} className="group flex items-center justify-between rounded-2xl border border-border/70 bg-background px-4 py-3.5 text-left text-sm font-medium transition-all hover:-translate-y-0.5 hover:border-primary/30 hover:bg-primary/5 hover:shadow-md">
-                        <span>{question}</span>
-                        <ArrowRight className="h-4 w-4 text-muted-foreground transition-transform group-hover:translate-x-1 group-hover:text-primary" />
-                      </button>
+                ) : (
+                  <div className="flex-1 space-y-5 overflow-y-auto px-6 py-6">
+                    {aiMessages.map((message) => (
+                      <div
+                        key={message.id}
+                        className={`flex ${message.role === "user" ? "justify-end" : "justify-start"}`}
+                      >
+                        {message.role === "assistant" && (
+                          <span className="mr-2.5 mt-1 grid h-8 w-8 shrink-0 place-items-center rounded-xl bg-primary/10 text-primary">
+                            <Bot className="h-4 w-4" />
+                          </span>
+                        )}
+                        <div
+                          className={`max-w-[82%] rounded-2xl px-4 py-3 text-sm ${message.role === "user" ? "bg-primary text-primary-foreground shadow-lg shadow-primary/15" : "border border-border/60 bg-secondary/70 text-foreground"}`}
+                        >
+                          {message.role === "assistant" ? (
+                            <MarkdownText text={message.text} />
+                          ) : (
+                            <p className="leading-6">{message.text}</p>
+                          )}
+                        </div>
+                      </div>
                     ))}
-                  </div>
-                </div>
-              ) : (
-                <div className="flex-1 space-y-5 overflow-y-auto px-6 py-6">
-                  {aiMessages.map((message) => (
-                    <div key={message.id} className={`flex ${message.role === "user" ? "justify-end" : "justify-start"}`}>
-                      {message.role === "assistant" && (
-                        <span className="mr-2.5 mt-1 grid h-8 w-8 shrink-0 place-items-center rounded-xl bg-primary/10 text-primary">
+                    {aiLoading && (
+                      <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                        <span className="grid h-8 w-8 place-items-center rounded-xl bg-primary/10 text-primary">
                           <Bot className="h-4 w-4" />
                         </span>
-                      )}
-                      <div className={`max-w-[82%] rounded-2xl px-4 py-3 text-sm ${message.role === "user" ? "bg-primary text-primary-foreground shadow-lg shadow-primary/15" : "border border-border/60 bg-secondary/70 text-foreground"}`}>
-                        {message.role === "assistant" ? (
-                          <MarkdownText text={message.text} />
-                        ) : (
-                          <p className="leading-6">{message.text}</p>
-                        )}
+                        <span className="flex gap-1 rounded-full border border-border/60 bg-secondary/70 px-3 py-2">
+                          <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-primary" />
+                          <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-primary [animation-delay:150ms]" />
+                          <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-primary [animation-delay:300ms]" />
+                        </span>
                       </div>
-                    </div>
-                  ))}
-                  {aiLoading && (
-                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                      <span className="grid h-8 w-8 place-items-center rounded-xl bg-primary/10 text-primary"><Bot className="h-4 w-4" /></span>
-                      <span className="flex gap-1 rounded-full border border-border/60 bg-secondary/70 px-3 py-2">
-                        <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-primary" />
-                        <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-primary [animation-delay:150ms]" />
-                        <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-primary [animation-delay:300ms]" />
-                      </span>
-                    </div>
-                  )}
-                </div>
-              )}
-
-              <div className="border-t border-border/70 bg-card/95 px-5 py-4 backdrop-blur">
-                <form id="ask-ai-form" onSubmit={handleAiSubmit}>
-                  <div className="flex items-end gap-2.5 rounded-2xl border border-border bg-background p-2 shadow-sm transition-all focus-within:border-primary/40 focus-within:ring-4 focus-within:ring-primary/10">
-                    <textarea
-                      value={aiQuestion}
-                      onChange={(event) => setAiQuestion(event.target.value)}
-                      onKeyDown={(event) => {
-                        if (event.key === "Enter" && !event.shiftKey) {
-                          event.preventDefault();
-                          event.currentTarget.form?.requestSubmit();
-                        }
-                      }}
-                      rows={2}
-                      maxLength={500}
-                      placeholder="Ask about this PDF..."
-                      disabled={aiLoading}
-                      className="min-h-12 flex-1 resize-none border-0 bg-transparent px-2 py-2 text-sm outline-none placeholder:text-muted-foreground/70 disabled:opacity-60"
-                    />
-                    <button type="submit" disabled={!aiQuestion.trim() || aiLoading} className="mb-0.5 grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-primary text-primary-foreground shadow-lg shadow-primary/20 transition-transform hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-50" aria-label="Send question">
-                      {aiLoading ? <LoaderCircle className="h-5 w-5 animate-spin" /> : <Send className="h-5 w-5" />}
-                    </button>
+                    )}
                   </div>
-                  <p className="mt-2 text-center text-[10px] text-muted-foreground">
-                    Enter to send · Shift + Enter for a new line
-                  </p>
-                </form>
+                )}
+
+                <div className="border-t border-border/70 bg-card/95 px-5 py-4 backdrop-blur">
+                  <form id="ask-ai-form" onSubmit={handleAiSubmit}>
+                    <div className="flex items-end gap-2.5 rounded-2xl border border-border bg-background p-2 shadow-sm transition-all focus-within:border-primary/40 focus-within:ring-4 focus-within:ring-primary/10">
+                      <textarea
+                        value={aiQuestion}
+                        onChange={(event) => setAiQuestion(event.target.value)}
+                        onKeyDown={(event) => {
+                          if (event.key === "Enter" && !event.shiftKey) {
+                            event.preventDefault();
+                            event.currentTarget.form?.requestSubmit();
+                          }
+                        }}
+                        rows={2}
+                        maxLength={500}
+                        placeholder="Ask about this PDF..."
+                        disabled={aiLoading}
+                        className="min-h-12 flex-1 resize-none border-0 bg-transparent px-2 py-2 text-sm outline-none placeholder:text-muted-foreground/70 disabled:opacity-60"
+                      />
+                      <button
+                        type="submit"
+                        disabled={!aiQuestion.trim() || aiLoading}
+                        className="mb-0.5 grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-primary text-primary-foreground shadow-lg shadow-primary/20 transition-transform hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-50"
+                        aria-label="Send question"
+                      >
+                        {aiLoading ? (
+                          <LoaderCircle className="h-5 w-5 animate-spin" />
+                        ) : (
+                          <Send className="h-5 w-5" />
+                        )}
+                      </button>
+                    </div>
+                    <p className="mt-2 text-center text-[10px] text-muted-foreground">
+                      Enter to send · Shift + Enter for a new line
+                    </p>
+                  </form>
+                </div>
               </div>
             </div>
-          </div>
           )}
 
           {/* Rate this PDF */}

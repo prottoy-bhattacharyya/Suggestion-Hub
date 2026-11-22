@@ -124,6 +124,7 @@ CREATE TABLE IF NOT EXISTS notes (
   processing_status ENUM('processing','ready','failed')   NOT NULL DEFAULT 'processing',
   rating_avg        DECIMAL(3,2) NOT NULL DEFAULT 0.00,  -- cached from ratings
   rating_count      INT UNSIGNED NOT NULL DEFAULT 0,     -- cached from ratings
+  view_count        INT UNSIGNED NOT NULL DEFAULT 0,    -- cached from note_daily_views
   approved_at       DATETIME     NULL,               -- used for feed ordering
   created_at        DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (id),
@@ -192,6 +193,25 @@ CREATE TABLE IF NOT EXISTS comments (
   KEY idx_comments_note (note_id, created_at),
   CONSTRAINT fk_comments_note FOREIGN KEY (note_id) REFERENCES notes (id) ON DELETE CASCADE,
   CONSTRAINT fk_comments_user FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
+) ENGINE=InnoDB;
+
+-- ---------------------------------------------------------------------
+-- daily views (track unique daily views per note)
+-- ---------------------------------------------------------------------
+
+CREATE TABLE note_daily_views (
+  id         BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  note_id    INT UNSIGNED NOT NULL,
+  viewer_id  INT UNSIGNED NOT NULL,
+  view_date  DATE NOT NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  UNIQUE KEY uq_note_daily_viewer_day (note_id, viewer_id, view_date),
+  KEY idx_note_daily_note_date (note_id, view_date),
+  CONSTRAINT fk_note_daily_views_note
+    FOREIGN KEY (note_id) REFERENCES notes (id) ON DELETE CASCADE ON UPDATE CASCADE,
+  CONSTRAINT fk_note_daily_views_viewer
+    FOREIGN KEY (viewer_id) REFERENCES users (id) ON DELETE CASCADE ON UPDATE CASCADE
 ) ENGINE=InnoDB;
 
 -- ---------------------------------------------------------------------

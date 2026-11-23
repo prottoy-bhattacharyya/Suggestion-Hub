@@ -1,8 +1,16 @@
 import json
+import os
 from django.shortcuts import render
-from django.http import JsonResponse
+from django.http import FileResponse, JsonResponse
 from django.middleware.csrf import get_token
-from core.utils import get_db_connection
+from core.utils import (
+    avatar_absolute_path,
+    avatar_relative_path,
+    avatar_url,
+    get_db_connection,
+    process_avatar,
+    write_avatar_file,
+)
 
 # Create your views here.
 def csrf(request):
@@ -75,7 +83,7 @@ def me(request):
     with get_db_connection() as conn:
         cursor = conn.cursor(dictionary=True)
 
-        cursor.execute("SELECT role, is_active, is_verified FROM users WHERE id = %s", (user['id'],))
+        cursor.execute("SELECT role, is_active, is_verified, avatar FROM users WHERE id = %s", (user['id'],))
         user_verification = cursor.fetchone()
 
         if not user_verification:
@@ -109,6 +117,9 @@ def me(request):
 
     
     if user:
+        user = dict(user)
+        user["avatar_url"] = avatar_url(request, user["id"], user_verification["avatar"])
+        request.session['user'] = user
         return JsonResponse(
             {
                 "status": "success",
@@ -178,6 +189,7 @@ def login(request):
                 "department_id": user['department_id'],
                 "intake": user['intake'],
                 "section": user['section'],
+                "avatar_url": avatar_url(request, user['id'], user.get('avatar')),
             }
         }
     if user["role"] == "teacher" and user["is_verified"]:
@@ -192,6 +204,7 @@ def login(request):
                 "department_id": user["department_id"],
                 "designation": user["designation"],
                 "employee_id": user["employee_id"],
+                "avatar_url": avatar_url(request, user['id'], user.get('avatar')),
             }
         }
     
@@ -221,7 +234,7 @@ def profile(request, user_id):
         """
         SELECT u.id, u.email, u.full_name, u.role, u.student_id,
                u.department_id, u.intake, u.section, u.designation,
-               u.employee_id, d.name AS department_name
+               u.employee_id, u.avatar, d.name AS department_name
         FROM users u
         LEFT JOIN departments d ON d.id = u.department_id
         WHERE u.id = %s
@@ -294,6 +307,8 @@ def profile(request, user_id):
             "department_rank": None,
         }
 
+    user["avatar_url"] = avatar_url(request, user["id"], user.pop("avatar", None))
+
     cursor.close()
     conn.close()
 
@@ -312,3 +327,81 @@ def profile(request, user_id):
         },
         status=200,
     )
+
+
+def upload_avatar(request):
+    if request.method != "POST":
+        return JsonResponse({"status": "failed", "error": "Invalid request method."}, status=405)
+
+    session_user = request.session.get("user")
+    if not session_user:
+        return JsonResponse({"status": "failed", "error": "You need to login first."}, status=401)
+
+    user_id = session_user.get("id")
+    uploaded_file = request.FILES.get("avatar")
+    if not uploaded_file:
+        return JsonResponse({"status": "failed", "error": "Avatar image is required."}, status=400)
+
+    try:
+        data = process_avatar(uploaded_file)
+    except ValueError as error:
+        return JsonResponse({"status": "failed", "error": str(error)}, status=400)
+
+    relative_path = avatar_relative_path(user_id)
+    created_path = avatar_absolute_path(relative_path)
+    existed_before = bool(created_path and os.path.exists(created_path))
+    old_avatar = None
+    conn = get_db_connection()
+    try:
+        with conn.cursor(dictionary=True) as cursor:
+            cursor.execute("SELECT avatar FROM users WHERE id = %s", (user_id,))
+            user_row = cursor.fetchone()
+            if not user_row:
+                return JsonResponse({"status": "failed", "error": "User not found."}, status=404)
+            old_avatar = user_row["avatar"]
+            write_avatar_file(relative_path, data)
+            cursor.execute("UPDATE users SET avatar = %s WHERE id = %s", (relative_path, user_id))
+        conn.commit()
+    except Exception as error:
+        conn.rollback()
+        if created_path and not existed_before and os.path.exists(created_path):
+            os.remove(created_path)
+        return JsonResponse({"status": "error", "error": str(error)}, status=500)
+    finally:
+        conn.close()
+
+    if old_avatar and old_avatar != relative_path:
+        old_path = avatar_absolute_path(old_avatar)
+        if old_path and os.path.exists(old_path):
+            os.remove(old_path)
+
+    url = avatar_url(request, user_id, relative_path)
+    session_user = dict(session_user)
+    session_user["avatar_url"] = url
+    request.session["user"] = session_user
+    return JsonResponse({"status": "success", "avatar_url": url})
+
+
+def user_avatar(request, user_id):
+    if request.method != "GET":
+        return JsonResponse({"status": "failed", "error": "Invalid request method."}, status=405)
+
+    conn = get_db_connection()
+    try:
+        with conn.cursor(dictionary=True) as cursor:
+            cursor.execute("SELECT avatar FROM users WHERE id = %s", (user_id,))
+            user_row = cursor.fetchone()
+    finally:
+        conn.close()
+
+    if not user_row or not user_row["avatar"]:
+        return JsonResponse({"status": "failed", "error": "Avatar not found."}, status=404)
+
+    path = avatar_absolute_path(user_row["avatar"])
+    if not path or not os.path.isfile(path):
+        return JsonResponse({"status": "failed", "error": "Avatar not found."}, status=404)
+
+    response = FileResponse(open(path, "rb"), content_type="image/webp")
+    response["Cache-Control"] = "public, max-age=3600"
+    response["X-Content-Type-Options"] = "nosniff"
+    return response

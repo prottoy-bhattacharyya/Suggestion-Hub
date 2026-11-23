@@ -14,6 +14,7 @@ dependencies = [
     "mysqlclient>=2.3.0",
     "pypdf>=6",
     "google-genai>=1",
+    "pillow>=11",
 ]
 
 [project.scripts]

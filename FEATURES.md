@@ -49,9 +49,13 @@ your status against the database (e.g., if a teacher's verification was revoked)
 **Profiles** (`/profile/$id`, with `/profile/me` for yourself). Shows your role,
 department, courses, follower/following counts, and your uploads split into
 Approved / Pending / Rejected tabs. Visitors only see your approved uploads.
+Your own profile has a **Change photo** control. JPG, PNG, WEBP, and GIF images up
+to 12 MB are verified and automatically compressed to a WEBP of at most 2 MB, then
+shown on your profile, the header, feed, search results, PDF pages, comments,
+follower lists, and leaderboard.
 
-**Not implemented**: email verification, password reset, and editing your profile
-are on the roadmap — the signup route for verification is commented out.
+**Not implemented**: email verification, password reset, and editing other profile
+fields are on the roadmap — the signup route for verification is commented out.
 
 ---
 

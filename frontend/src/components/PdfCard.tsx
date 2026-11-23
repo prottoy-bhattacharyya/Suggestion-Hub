@@ -1,5 +1,6 @@
 import { Link } from "@tanstack/react-router";
 import { FileText, Play, Star, Download, ExternalLink } from "lucide-react";
+import { UserAvatar } from "@/components/UserAvatar";
 import { userById, type Status, type Pdf } from "@/lib/mock-data";
 
 export type Note = {
@@ -14,6 +15,7 @@ export type Note = {
   rating_count: number;
   created_at: string;
   uploader_name: string;
+  uploader_avatar_url?: string | null;
   file_url?: string | null;
   file_type?: "pdf" | "video";
 };
@@ -170,11 +172,14 @@ export function NoteCard({ note }: { note: Note }) {
           )}
 
           <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-muted-foreground">
-            <span>
+            <span className="inline-flex items-center gap-1.5">
               by{" "}
-              <span className="font-medium text-foreground">
-                {note.uploader_name}
-              </span>
+              <UserAvatar
+                name={note.uploader_name}
+                src={note.uploader_avatar_url}
+                className="size-5 text-[9px]"
+              />
+              <span className="font-medium text-foreground">{note.uploader_name}</span>
             </span>
 
             <span>{formattedDate}</span>

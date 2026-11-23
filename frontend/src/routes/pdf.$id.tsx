@@ -22,6 +22,7 @@ import {
   ArrowRight,
 } from "lucide-react";
 import { StatusPill, Stars } from "@/components/PdfCard";
+import { UserAvatar } from "@/components/UserAvatar";
 import { getCSRFToken } from "@/lib/utils";
 import api from "@/lib/api";
 import axios from "axios";
@@ -78,6 +79,7 @@ type NoteDetail = {
   review_status: "pending" | "approved" | "rejected";
   uploader_id: number;
   uploader_name: string;
+  uploader_avatar_url?: string | null;
   course_code: string | null;
   is_owner: boolean;
   my_rating: number;
@@ -120,6 +122,7 @@ type Comment = {
   id: number;
   user_id: number;
   commenter_name: string;
+  avatar_url?: string | null;
   comment: string;
   created_at: string;
 };
@@ -459,13 +462,6 @@ function CommentsSection({ noteId }: { noteId: number }) {
           </div>
         ) : (
           comments.map((comment) => {
-            const initials = comment.commenter_name
-              .split(" ")
-              .map((word) => word[0])
-              .join("")
-              .slice(0, 2)
-              .toUpperCase();
-
             return (
               <article
                 key={comment.id}
@@ -475,9 +471,13 @@ function CommentsSection({ noteId }: { noteId: number }) {
                   to="/profile/$id"
                   params={{ id: String(comment.user_id) }}
                   aria-label={`View ${comment.commenter_name}'s profile`}
-                  className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-primary/10 text-sm font-semibold text-primary transition-colors hover:bg-primary/20"
+                  className="shrink-0 transition-opacity hover:opacity-80"
                 >
-                  {initials || "U"}
+                  <UserAvatar
+                    name={comment.commenter_name}
+                    src={comment.avatar_url}
+                    className="size-10 rounded-xl text-sm"
+                  />
                 </Link>
 
                 <div className="min-w-0 flex-1">
@@ -721,13 +721,6 @@ function PdfPage() {
   const activeStars = hoverRating || myRating;
   const starLabels = ["", "Poor", "Fair", "Good", "Great", "Excellent"];
 
-  const uploaderInitials = note.uploader_name
-    .split(" ")
-    .map((w: string) => w[0])
-    .join("")
-    .slice(0, 2)
-    .toUpperCase();
-
   const formattedDate = note.created_at
     ? new Date(note.created_at).toLocaleDateString(undefined, {
         year: "numeric",
@@ -902,9 +895,11 @@ function PdfPage() {
               params={{ id: String(note.uploader_id) }}
               className="relative mt-5 flex items-center gap-3 rounded-2xl border border-border/60 bg-background/60 p-3 transition-colors hover:border-primary/30 hover:bg-primary/5"
             >
-              <div className="grid h-10 w-10 place-items-center rounded-xl bg-primary font-display text-sm text-primary-foreground">
-                {uploaderInitials}
-              </div>
+              <UserAvatar
+                name={note.uploader_name}
+                src={note.uploader_avatar_url}
+                className="size-10 rounded-xl text-sm"
+              />
 
               <div className="min-w-0">
                 <p className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground">

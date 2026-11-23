@@ -21,6 +21,7 @@ import {
 } from "lucide-react";
 
 import { PdfCard } from "@/components/PdfCard";
+import { UserAvatar } from "@/components/UserAvatar";
 import { pdfs } from "@/lib/mock-data";
 import api from "@/lib/api";
 import { getCSRFToken } from "@/lib/utils";
@@ -56,6 +57,7 @@ type Person = {
   accountType?: string;
   followers: number;
   is_following: boolean;
+  avatar_url?: string | null;
 };
 
 type SearchNote = {
@@ -70,6 +72,7 @@ type SearchNote = {
   rating_count: number;
   approved_at: string | null;
   author_name: string;
+  author_avatar_url?: string | null;
   author_id: number;
   file_url: string;
   file_type?: "pdf" | "video";
@@ -232,6 +235,7 @@ function SearchPage() {
               "",
             followers: item.follower_count ?? 0,
             is_following: Boolean(item.is_following),
+            avatar_url: item.avatar_url ?? null,
           }),
         );
 
@@ -468,20 +472,16 @@ function SearchPage() {
           {!peopleLoading && people.length > 0 && (
             <div className="grid gap-3 sm:grid-cols-2">
               {people.map((person, i) => {
-                const initials = person.name
-                  .split(" ")
-                  .map((w) => w[0])
-                  .join("")
-                  .slice(0, 2)
-                  .toUpperCase();
                 const pending = followPendingId === person.id;
                 return (
                   <Reveal key={person.id} index={i}>
                     <div className="group flex h-full flex-col rounded-2xl border border-border/60 bg-card p-5 transition-all duration-300 hover:-translate-y-0.5 hover:border-primary/30 hover:shadow-lg hover:shadow-primary/5">
                       <div className="flex items-start gap-4">
-                        <div className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-primary font-display text-base text-primary-foreground shadow-md shadow-primary/20">
-                          {initials}
-                        </div>
+                        <UserAvatar
+                          name={person.name}
+                          src={person.avatar_url}
+                          className="size-12 rounded-2xl text-base"
+                        />
                         <div className="min-w-0 flex-1">
                           <Link
                             to="/profile/$id"
@@ -698,8 +698,13 @@ function KeywordNoteCard({ note }: { note: SearchNote }) {
 
           <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-border/60 pt-4">
             <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
-              <span>
+              <span className="inline-flex items-center gap-1.5">
                 By{" "}
+                <UserAvatar
+                  name={note.author_name}
+                  src={note.author_avatar_url}
+                  className="size-5 text-[9px]"
+                />
                 <Link
                   to="/profile/$id"
                   params={{ id: String(note.author_id) }}

@@ -25,6 +25,7 @@ class HubUser(models.Model):
     email = models.CharField(max_length=254)
     password = models.CharField(max_length=255)   # REMINDER: currently plaintext (see caveats)
     full_name = models.CharField(max_length=150)
+    avatar = models.CharField(max_length=255, null=True, blank=True)
     role = models.CharField(max_length=10, choices=[("student","student"),("teacher","teacher"),("admin","admin")])
     student_id = models.CharField(max_length=30, null=True, blank=True)
     department = models.ForeignKey(Department, models.DO_NOTHING, null=True, db_column="department_id")

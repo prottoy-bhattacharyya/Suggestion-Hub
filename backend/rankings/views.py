@@ -2,7 +2,7 @@ from datetime import datetime
 
 from django.http import JsonResponse
 
-from core.utils import get_db_connection
+from core.utils import avatar_url, get_db_connection
 
 
 def _positive_int(value, default, maximum=None):
@@ -144,8 +144,8 @@ def users(request):
                        ur.approved_uploads, ur.ratings_received,
                        ur.views_received, ur.followers,
                        ur.comments_received, ur.completed_reviews,
-                       u.full_name, u.role, u.department_id,
-                       d.name AS department_name,
+                        u.full_name, u.role, u.department_id, u.avatar,
+                        d.name AS department_name,
                        CASE WHEN ur.user_id = %s THEN 1 ELSE 0 END AS is_me
                 FROM user_rankings ur
                 JOIN users u ON u.id = ur.user_id
@@ -183,6 +183,7 @@ def users(request):
 
             for entry in entries:
                 entry["is_me"] = bool(entry["is_me"])
+                entry["avatar_url"] = avatar_url(request, entry["user_id"], entry["avatar"])
                 entry["rank"] = (
                     entry["rank_department"] if scope == "department" else entry["rank_global"]
                 )

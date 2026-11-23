@@ -13,6 +13,7 @@ import {
   Users,
 } from "lucide-react";
 
+import { UserAvatar } from "@/components/UserAvatar";
 import api from "@/lib/api";
 import {
   titleTone,
@@ -293,7 +294,12 @@ function LeaderboardPage() {
                     params={{ id: String(entry.user_id) }}
                     className="flex items-center gap-4"
                   >
-                    <span className="grid size-10 shrink-0 place-items-center rounded-full bg-muted text-sm font-semibold tabular-nums">
+                    <UserAvatar
+                      name={entry.full_name}
+                      src={entry.avatar_url}
+                      className="size-10 text-sm"
+                    />
+                    <span className="grid size-9 shrink-0 place-items-center rounded-full bg-muted text-sm font-semibold tabular-nums">
                       {entry.rank ?? "—"}
                     </span>
                     <div className="min-w-0 flex-1">
@@ -363,6 +369,8 @@ function PodiumCard({ entry, position }: { entry: LeaderboardEntry; position: nu
       >
         {entry.title}
       </span>
+
+      <UserAvatar name={entry.full_name} src={entry.avatar_url} className="mt-3 size-12 text-sm" />
 
       <Link
         to="/profile/$id"

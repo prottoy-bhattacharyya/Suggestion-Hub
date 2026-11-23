@@ -1,6 +1,6 @@
 from django.http import JsonResponse
 
-from core.utils import get_db_connection
+from core.utils import avatar_url, get_db_connection
 
 
 def feeds(request):
@@ -23,7 +23,7 @@ def feeds(request):
                     n.id, n.title, COALESCE(n.description, ''), n.type,
                     n.intake, COALESCE(n.section, ''), n.rating_avg, n.rating_count,
                     n.created_at, n.review_status, n.uploader_id, c.code AS course_code, u.full_name,
-                    n.file_type
+                    u.avatar, n.file_type
                 FROM notes n
                 LEFT JOIN users u ON n.uploader_id = u.id
                 LEFT JOIN courses c ON n.course_id = c.id
@@ -48,7 +48,8 @@ def feeds(request):
                     "uploader_id": row[10],
                     "course_code": row[11],
                     "uploader_name": row[12],
-                    "file_type": row[13],
+                    "avatar_url": avatar_url(request, row[10], row[13]),
+                    "file_type": row[14],
                     "file_url": request.build_absolute_uri(f"/notes/{row[0]}/file/"),
                 }
                 for row in rows
@@ -82,8 +83,8 @@ def get_feeds_by_following(request):
                 """
                 SELECT n.id, n.title, n.description, n.type, n.intake, n.section,
                        n.rating_avg, n.rating_count, n.created_at, n.review_status,
-                       u.full_name AS uploader_name, r.comment AS review_comment,
-                       n.file_type
+                       n.uploader_id, u.full_name AS uploader_name, u.avatar,
+                       r.comment AS review_comment, n.file_type
                 FROM notes n
                 JOIN users u ON n.uploader_id = u.id
                 LEFT JOIN reviews r ON n.id = r.note_id
@@ -99,6 +100,7 @@ def get_feeds_by_following(request):
         for note in notes:
             note["created_at"] = note["created_at"].strftime("%Y-%m-%d") if note["created_at"] else None
             note["file_url"] = request.build_absolute_uri(f"/notes/{note['id']}/file/")
+            note["avatar_url"] = avatar_url(request, note["uploader_id"], note.get("avatar"))
 
         return JsonResponse({"status": "success", "notes": notes})
     finally:

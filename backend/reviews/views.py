@@ -1,7 +1,7 @@
 import json
 from django.http import JsonResponse
 from django.shortcuts import render
-from core.utils import get_db_connection
+from core.utils import avatar_url, get_db_connection
 from rankings.service import (
     rebuild_rank_positions,
     recalculate_users_ranks,
@@ -86,8 +86,8 @@ def get_notes(request):
                 """
                 SELECT
                     n.id, n.title, n.description, n.course_id, n.type, c.code AS course_code, n.intake, 
-                    n.section, n.review_status, n.created_at, 
-                    u.full_name AS uploader_name
+                    n.section, n.review_status, n.created_at,
+                    n.uploader_id, u.full_name AS uploader_name, u.avatar
                 FROM notes n
                 JOIN teacher_courses tc ON n.course_id = tc.course_id
                 JOIN users u ON n.uploader_id = u.id
@@ -97,6 +97,10 @@ def get_notes(request):
                 (teacher_id,)
             )
             notes = cursor.fetchall()
+            for note in notes:
+                note["uploader_avatar_url"] = avatar_url(
+                    request, note["uploader_id"], note["avatar"]
+                )
             return JsonResponse({"status": "success", "notes": notes})
         except Exception as e:
             return JsonResponse({"status": "error", "message": str(e)}, status=500)

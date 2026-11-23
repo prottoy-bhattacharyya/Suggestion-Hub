@@ -13,6 +13,7 @@ import {
   XCircle,
 } from "lucide-react";
 
+import { UserAvatar } from "@/components/UserAvatar";
 import api from "@/lib/api";
 import { getCSRFToken } from "@/lib/utils";
 
@@ -46,6 +47,7 @@ interface ReviewNote {
   review_status: string;
   created_at: string;
   uploader_name: string;
+  uploader_avatar_url?: string | null;
 }
 
 interface ReviewLog {
@@ -691,11 +693,18 @@ function Teacher() {
                           </p>
                         )}
 
-                        <p className="mt-3 text-sm text-muted-foreground">
-                          <span className="font-medium text-foreground">
-                            {note.uploader_name}
-                          </span>{" "}
-                          for intake {note.intake}, section {note.section}
+                        <p className="mt-3 inline-flex items-center gap-2 text-sm text-muted-foreground">
+                          <UserAvatar
+                            name={note.uploader_name}
+                            src={note.uploader_avatar_url}
+                            className="size-6 text-[9px]"
+                          />
+                          <span>
+                            <span className="font-medium text-foreground">
+                              {note.uploader_name}
+                            </span>{" "}
+                            for intake {note.intake}, section {note.section}
+                          </span>
                         </p>
 
                         <p

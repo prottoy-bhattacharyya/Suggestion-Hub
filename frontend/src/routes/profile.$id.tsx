@@ -1,5 +1,5 @@
 ﻿import { createFileRoute, Link, notFound, redirect } from "@tanstack/react-router";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
 import {
   LoaderCircle,
   CheckCircle2,
@@ -11,6 +11,7 @@ import {
   GraduationCap,
   Hash,
   Briefcase,
+  Camera,
   UserPlus,
   UserCheck,
   Inbox,
@@ -21,6 +22,7 @@ import {
 } from "lucide-react";
 
 import { NoteCard, type Note as PdfCardNote } from "@/components/PdfCard";
+import { UserAvatar } from "@/components/UserAvatar";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -31,7 +33,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import api from "@/lib/api";
-import { getSessionUser } from "@/lib/auth";
+import { getSessionUser, notifyAuthChange } from "@/lib/auth";
 import { titleTone } from "@/lib/rankings";
 import { getCSRFToken } from "@/lib/utils";
 
@@ -48,6 +50,7 @@ type ProfileData = {
     section?: string | null;
     designation?: string | null;
     employee_id?: string | null;
+    avatar_url?: string | null;
   };
   followers: number;
   following: number;
@@ -83,6 +86,7 @@ type FollowProfile = {
   id: number;
   full_name: string;
   role: string;
+  avatar_url?: string | null;
 };
 
 type FollowListResponse = {
@@ -163,6 +167,13 @@ function Profile() {
   const [followingCount, setFollowingCount] = useState(profile.following);
   const [unfollowPendingId, setUnfollowPendingId] = useState<number | null>(null);
 
+  const [avatarUrl, setAvatarUrl] = useState(user.avatar_url ?? null);
+  const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
+  const [avatarFile, setAvatarFile] = useState<File | null>(null);
+  const [avatarUploading, setAvatarUploading] = useState(false);
+  const [avatarError, setAvatarError] = useState("");
+  const avatarInputRef = useRef<HTMLInputElement>(null);
+
   const [notes, setNotes] = useState<ProfileNote[]>([]);
   const [notesLoading, setNotesLoading] = useState(true);
   const [notesError, setNotesError] = useState("");
@@ -181,7 +192,18 @@ function Profile() {
     setFollowListError("");
     setUnfollowPendingId(null);
     setTab("approved");
-  }, [profile.followers, profile.following, user.id, isMe]);
+    setAvatarUrl(user.avatar_url ?? null);
+    setAvatarFile(null);
+    setAvatarPreview(null);
+    setAvatarError("");
+    setAvatarUploading(false);
+  }, [profile.followers, profile.following, user.id, user.avatar_url, isMe]);
+
+  useEffect(() => {
+    return () => {
+      if (avatarPreview) URL.revokeObjectURL(avatarPreview);
+    };
+  }, [avatarPreview]);
 
   // Fetch notes belonging to this profile.
   useEffect(() => {
@@ -380,14 +402,61 @@ function Profile() {
     }
   }
 
-  const totalUploads = isMe ? notes.length : approvedNotes.length;
+  function handleAvatarSelect(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    if (!file) return;
 
-  const initials = user.full_name
-    .split(" ")
-    .map((word) => word[0])
-    .join("")
-    .slice(0, 2)
-    .toUpperCase();
+    if (!["image/jpeg", "image/png", "image/webp", "image/gif"].includes(file.type)) {
+      setAvatarError("Use a JPG, PNG, WEBP, or GIF image.");
+      event.target.value = "";
+      return;
+    }
+    if (file.size > 12 * 1024 * 1024) {
+      setAvatarError("Profile pictures must be 12 MB or smaller.");
+      event.target.value = "";
+      return;
+    }
+
+    setAvatarFile(file);
+    setAvatarPreview(URL.createObjectURL(file));
+    setAvatarError("");
+  }
+
+  async function handleAvatarUpload() {
+    if (!avatarFile || avatarUploading) return;
+
+    setAvatarUploading(true);
+    setAvatarError("");
+
+    try {
+      const csrfToken = await getCSRFToken();
+      const form = new FormData();
+      form.append("avatar", avatarFile);
+
+      const { data } = await api.post<{ status: string; avatar_url: string }>(
+        "/accounts/profile/avatar/",
+        form,
+        {
+          headers: {
+            Accept: "application/json",
+            ...(csrfToken ? { "X-CSRFToken": csrfToken } : {}),
+          },
+        },
+      );
+
+      setAvatarUrl(data.avatar_url);
+      setAvatarFile(null);
+      setAvatarPreview(null);
+      notifyAuthChange();
+    } catch {
+      setAvatarError("Unable to upload profile picture.");
+    } finally {
+      setAvatarUploading(false);
+      if (avatarInputRef.current) avatarInputRef.current.value = "";
+    }
+  }
+
+  const totalUploads = isMe ? notes.length : approvedNotes.length;
 
   const details = [
     ...(user.email
@@ -497,11 +566,60 @@ function Profile() {
       {/* Editorial identity header: no decorative banner or floating container. */}
       <section aria-labelledby="profile-name" className="border-b border-border pb-8 sm:pb-10">
         <div className="flex flex-col gap-6 sm:flex-row sm:items-center sm:gap-7">
-          <div
-            aria-hidden="true"
-            className="grid size-24 shrink-0 place-items-center rounded-lg border border-primary/20 bg-primary/10 font-display text-4xl font-semibold text-primary sm:size-28"
-          >
-            {initials || "?"}
+          <div className="flex shrink-0 flex-col items-center gap-3">
+            <UserAvatar
+              name={user.full_name}
+              src={avatarPreview ?? avatarUrl}
+              className="size-24 rounded-lg border border-primary/20 text-4xl sm:size-28"
+              fallbackClassName="rounded-lg"
+            />
+            {isMe && (
+              <>
+                <input
+                  ref={avatarInputRef}
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp,image/gif"
+                  className="sr-only"
+                  onChange={handleAvatarSelect}
+                  aria-label="Choose profile picture"
+                />
+                <div className="flex flex-wrap justify-center gap-2">
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={() => avatarInputRef.current?.click()}
+                    disabled={avatarUploading}
+                    className="gap-1.5"
+                  >
+                    <Camera className="size-3.5" aria-hidden="true" />
+                    Change photo
+                  </Button>
+                  {avatarFile && (
+                    <Button
+                      type="button"
+                      size="sm"
+                      onClick={handleAvatarUpload}
+                      disabled={avatarUploading}
+                      className="gap-1.5"
+                    >
+                      {avatarUploading ? (
+                        <LoaderCircle
+                          className="size-3.5 animate-spin motion-reduce:animate-none"
+                          aria-hidden="true"
+                        />
+                      ) : null}
+                      Save photo
+                    </Button>
+                  )}
+                </div>
+                {avatarError && (
+                  <p role="alert" className="text-center text-xs text-destructive">
+                    {avatarError}
+                  </p>
+                )}
+              </>
+            )}
           </div>
           <div className="min-w-0 flex-1">
             <div className="mb-3 flex flex-wrap items-center gap-2 text-xs font-medium text-muted-foreground">
@@ -643,13 +761,6 @@ function Profile() {
             ) : (
               <ul className="divide-y divide-border">
                 {followList.map((person) => {
-                  const personInitials = person.full_name
-                    .split(" ")
-                    .map((word) => word[0])
-                    .join("")
-                    .slice(0, 2)
-                    .toUpperCase();
-
                   return (
                     <li key={person.id}>
                       <div className="flex items-center gap-2 py-2">
@@ -659,9 +770,11 @@ function Profile() {
                           onClick={() => setFollowListOpen(null)}
                           className="flex min-w-0 flex-1 items-center gap-3 rounded-md px-2 py-1 transition-colors hover:bg-muted"
                         >
-                          <span className="grid size-10 shrink-0 place-items-center rounded-full bg-primary text-sm font-semibold text-primary-foreground">
-                            {personInitials}
-                          </span>
+                          <UserAvatar
+                            name={person.full_name}
+                            src={person.avatar_url}
+                            className="size-10 text-sm"
+                          />
                           <span className="min-w-0">
                             <span className="block truncate font-semibold">{person.full_name}</span>
                             <span className="block text-xs capitalize text-muted-foreground">

@@ -226,12 +226,13 @@ On success, this endpoint stores the returned `user` object in `request.session[
     "student_id": "20240001",
     "department_id": 1,
     "intake": "24",
-    "section": "A"
+    "section": "A",
+    "avatar_url": "http://localhost:8000/accounts/avatar/1/"
   }
 }
 ```
 
-The `user` object is the session copy created during login, not a fresh full database row.
+The `user` object is the session copy created during login. `avatar_url` is refreshed from the database on each `/accounts/me/` request and is `null` when no picture is set.
 
 `200 OK` when not logged in:
 
@@ -316,7 +317,8 @@ This flushes the Django session.
     "section": "A",
     "designation": null,
     "employee_id": null,
-    "department_name": "Computer Science and Engineering"
+    "department_name": "Computer Science and Engineering",
+    "avatar_url": "http://localhost:8000/accounts/avatar/1/"
   },
   "followers": 5,
   "following": 3,
@@ -342,6 +344,21 @@ For a teacher, `courses` contains assigned course codes:
 ```
 
 `is_owner` is `true` when the session user's `id` equals `<user_id>`.
+
+#### Profile picture endpoints
+
+- `GET /accounts/avatar/<user_id>/` returns the stored avatar image or `404`.
+- `POST /accounts/profile/avatar/` uploads the logged-in user's avatar. Send multipart form data with field `avatar` and the `X-CSRFToken` header from `/accounts/csrf/`.
+- Accepted formats are JPG, PNG, WEBP, and GIF. Source uploads up to 12 MB are verified, stripped of metadata, resized to at most 2048×2048, and automatically re-encoded as WEBP of at most 2 MB under `uploaded_notes/avatars/`. Larger source uploads are rejected.
+
+`200 OK`:
+
+```json
+{
+  "status": "success",
+  "avatar_url": "http://localhost:8000/accounts/avatar/1/"
+}
+```
 
 ---
 

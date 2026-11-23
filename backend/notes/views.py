@@ -11,7 +11,7 @@ from django.http import FileResponse, HttpResponse, JsonResponse
 from django.views.decorators.clickjacking import xframe_options_exempt
 
 from .utils import getFileHash, save_file
-from core.utils import get_db_connection
+from core.utils import avatar_url, get_db_connection
 from rankings.service import rebuild_rank_positions, recalculate_user_rank
 
 MAX_PDF_BYTES = 20 * 1024 * 1024
@@ -233,10 +233,10 @@ def upload_note(request):
                     ),
                 )
 
-            recalculate_user_rank(uploader_id, cursor=insert_cursor, rebuild=False)
-            rebuild_rank_positions(insert_cursor)
-            conn.commit()
-            shutil.rmtree(upload_dir, ignore_errors=True)
+                recalculate_user_rank(uploader_id, cursor=insert_cursor, rebuild=False)
+                rebuild_rank_positions(insert_cursor)
+                conn.commit()
+                shutil.rmtree(upload_dir, ignore_errors=True)
             return JsonResponse(
                 {
                     'status': 'success',
@@ -434,8 +434,8 @@ def get_notes(request):
             select 
                 n.id, n.title, n.description, n.type, n.intake, n.section,
                 n.rating_avg, n.rating_count, n.created_at, n.review_status,
-                u.full_name as uploader_name, r.comment as review_comment,
-                n.file_type, n.view_count
+                u.full_name as uploader_name, u.avatar, r.comment as review_comment,
+                n.file_type, n.view_count, n.uploader_id
             from notes n
             left join users u on n.uploader_id = u.id
             left join reviews r on n.id = r.note_id
@@ -465,9 +465,10 @@ def get_notes(request):
                     'created_at': note[8].strftime("%Y-%m-%d %H:%M:%S") if note[8] else None,
                     'review_status': note[9],
                     'uploader_name': note[10],
-                    'review_comment': note[11],
-                    'file_type': note[12],
-                    'view_count': note[13],
+                    'uploader_avatar_url': avatar_url(request, note[15], note[11]),
+                    'review_comment': note[12],
+                    'file_type': note[13],
+                    'view_count': note[14],
                     'file_url': request.build_absolute_uri(
                         f"/notes/{note[0]}/file/"
                     ),
@@ -507,8 +508,8 @@ def note_detail(request, note_id):
         cursor.execute(
             """
             SELECT n.id, n.title, n.description, n.type, n.intake, n.section,
-                   n.rating_avg, n.rating_count, n.created_at, n.review_status,
-                   n.uploader_id, u.full_name AS uploader_name,
+                    n.rating_avg, n.rating_count, n.created_at, n.review_status,
+                    n.uploader_id, u.full_name AS uploader_name, u.avatar,
                     c.code AS course_code, n.file_type, n.view_count
             FROM notes n
             LEFT JOIN users u ON n.uploader_id = u.id
@@ -528,7 +529,7 @@ def note_detail(request, note_id):
     (
         id_, title, description, type_, intake, section,
         rating_avg, rating_count, created_at, review_status,
-        uploader_id, uploader_name, course_code, file_type, view_count,
+        uploader_id, uploader_name, uploader_avatar, course_code, file_type, view_count,
     ) = row
 
     # Pending notes are only visible to their uploader, teachers and admins.
@@ -586,6 +587,7 @@ def note_detail(request, note_id):
                 'review_status': review_status,
                 'uploader_id': uploader_id,
                 'uploader_name': uploader_name,
+                'uploader_avatar_url': avatar_url(request, uploader_id, uploader_avatar),
                 'course_code': course_code,
                 'is_owner': session_user.get('id') == uploader_id,
                 'my_rating': my_rating,

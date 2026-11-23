@@ -1,7 +1,7 @@
 import json
 from django.http import JsonResponse
 from django.shortcuts import render
-from core.utils import get_db_connection
+from core.utils import avatar_url, get_db_connection
 from django.views.decorators.csrf import csrf_exempt
 from rankings.service import (
     get_note_uploader,
@@ -193,7 +193,7 @@ def comments(request):
             cursor.execute(
                 """
                 SELECT 
-                    c.id, u.id as user_id, u.full_name as commenter_name, 
+                    c.id, u.id as user_id, u.full_name as commenter_name, u.avatar,
                     c.body as comment, c.created_at
                 FROM comments c
                 JOIN users u ON c.user_id = u.id
@@ -206,6 +206,7 @@ def comments(request):
 
             for comment in comments:
                 comment["created_at"] = comment["created_at"].strftime("%Y-%m-%d %H:%M:%S")
+                comment["avatar_url"] = avatar_url(request, comment["user_id"], comment["avatar"])
             for comment in comments:
                 if comment["user_id"] == session_user["id"]:
                     comment["commenter_name"] = "You"
@@ -258,7 +259,7 @@ def my_followers(request):
         with conn.cursor(dictionary=True) as cursor:
             cursor.execute(
                 """
-                SELECT u.id, u.full_name, u.role
+                SELECT u.id, u.full_name, u.role, u.avatar
                 FROM follows f
                 JOIN users u ON f.follower_id = u.id
                 WHERE f.following_id = %s
@@ -266,6 +267,9 @@ def my_followers(request):
                 (user_id,),
             )
             followers = cursor.fetchall()
+
+        for follower in followers:
+            follower["avatar_url"] = avatar_url(request, follower["id"], follower["avatar"])
 
         return JsonResponse({"status": "success", "followers": followers})
     finally:
@@ -287,7 +291,7 @@ def my_following(request):
         with conn.cursor(dictionary=True) as cursor:
             cursor.execute(
                 """
-                SELECT u.id, u.full_name, u.role
+                SELECT u.id, u.full_name, u.role, u.avatar
                 FROM follows f
                 JOIN users u ON f.following_id = u.id
                 WHERE f.follower_id = %s
@@ -295,6 +299,9 @@ def my_following(request):
                 (user_id,),
             )
             following = cursor.fetchall()
+
+        for item in following:
+            item["avatar_url"] = avatar_url(request, item["id"], item["avatar"])
 
         return JsonResponse({"status": "success", "following": following})
     finally:
@@ -313,7 +320,7 @@ def followers(request, user_id):
         with conn.cursor(dictionary=True) as cursor:
             cursor.execute(
                 """
-                SELECT u.id, u.full_name, u.role
+                SELECT u.id, u.full_name, u.role, u.avatar
                 FROM follows f
                 JOIN users u ON f.follower_id = u.id
                 WHERE f.following_id = %s
@@ -322,6 +329,9 @@ def followers(request, user_id):
                 (user_id,),
             )
             followers = cursor.fetchall()
+
+        for follower in followers:
+            follower["avatar_url"] = avatar_url(request, follower["id"], follower["avatar"])
 
         return JsonResponse({"status": "success", "followers": followers})
     finally:
@@ -340,7 +350,7 @@ def following(request, user_id):
         with conn.cursor(dictionary=True) as cursor:
             cursor.execute(
                 """
-                SELECT u.id, u.full_name, u.role
+                SELECT u.id, u.full_name, u.role, u.avatar
                 FROM follows f
                 JOIN users u ON f.following_id = u.id
                 WHERE f.follower_id = %s
@@ -349,6 +359,9 @@ def following(request, user_id):
                 (user_id,),
             )
             following = cursor.fetchall()
+
+        for item in following:
+            item["avatar_url"] = avatar_url(request, item["id"], item["avatar"])
 
         return JsonResponse({"status": "success", "following": following})
     finally:

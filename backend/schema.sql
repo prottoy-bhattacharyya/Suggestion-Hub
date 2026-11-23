@@ -65,6 +65,7 @@ CREATE TABLE IF NOT EXISTS users (
   email          VARCHAR(254) NOT NULL,
   password       VARCHAR(255) NOT NULL,              -- hashed (Django)
   full_name      VARCHAR(150) NOT NULL,
+  avatar         VARCHAR(255) NULL,
   role           ENUM('student','teacher','admin') NOT NULL DEFAULT 'student',
   student_id     VARCHAR(30)  NULL,                  -- students only
   department_id  INT UNSIGNED NULL,

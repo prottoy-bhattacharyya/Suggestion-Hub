@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import { useEffect, useState } from "react";
 
+import { UserAvatar } from "@/components/UserAvatar";
 import { getSessionUser, notifyAuthChange, type SessionUser } from "@/lib/auth";
 import api from "@/lib/api";
 import { getCSRFToken } from "@/lib/utils";
@@ -80,15 +81,6 @@ export function SiteHeader() {
     }
   };
 
-  const initials = user?.full_name
-    ? user.full_name
-        .split(" ")
-        .map((w) => w[0])
-        .join("")
-        .slice(0, 2)
-        .toUpperCase()
-    : "";
-
   const linkBase =
     "inline-flex items-center gap-1.5 rounded-full px-4 py-1.5 text-sm font-medium transition-all text-muted-foreground hover:text-foreground";
   const linkActive = "bg-background text-foreground shadow-sm";
@@ -140,9 +132,11 @@ export function SiteHeader() {
                 title={user.full_name}
                 className="group flex items-center gap-2.5 rounded-full border border-border/60 bg-card py-1 pl-1 pr-3 shadow-sm transition-all hover:border-primary/30 hover:shadow-md"
               >
-                <span className="grid h-8 w-8 place-items-center rounded-full bg-primary font-display text-xs text-primary-foreground">
-                  {initials}
-                </span>
+                <UserAvatar
+                  name={user.full_name}
+                  src={user.avatar_url}
+                  className="size-8 text-xs"
+                />
                 <span className="hidden max-w-28 truncate text-sm font-medium sm:block">
                   {user.full_name.split(" ")[0]}
                 </span>

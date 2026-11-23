@@ -20,6 +20,7 @@ export type LeaderboardEntry = {
   role: "student" | "teacher" | "admin";
   department_id: number | null;
   department_name: string | null;
+  avatar_url?: string | null;
   points: number;
   title: string;
   rank_global: number | null;

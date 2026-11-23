@@ -261,6 +261,39 @@ def profile(request, user_id):
         )
         courses = [row["code"] for row in cursor.fetchall()]
 
+    cursor.execute(
+        """
+        SELECT ur.points, ur.rank_title, ur.rank_global, ur.rank_department
+        FROM user_rankings ur
+        WHERE ur.user_id = %s
+        """,
+        (user_id,),
+    )
+    ranking_row = cursor.fetchone()
+    if ranking_row:
+        ranking = {
+            "points": ranking_row["points"],
+            "rank_title": ranking_row["rank_title"],
+            "global_rank": ranking_row["rank_global"],
+            "department_rank": ranking_row["rank_department"],
+        }
+    else:
+        cursor.execute(
+            """
+            SELECT title
+            FROM rank_titles
+            WHERE start_point = 0
+            LIMIT 1
+            """
+        )
+        default_title = cursor.fetchone()
+        ranking = {
+            "points": 0,
+            "rank_title": default_title["title"] if default_title else "Newbie",
+            "global_rank": None,
+            "department_rank": None,
+        }
+
     cursor.close()
     conn.close()
 
@@ -275,6 +308,7 @@ def profile(request, user_id):
             "following": following,
             "courses": courses,
             "is_owner": is_owner,
+            "ranking": ranking,
         },
         status=200,
     )

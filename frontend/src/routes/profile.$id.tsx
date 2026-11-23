@@ -1,9 +1,4 @@
-﻿import {
-  createFileRoute,
-  Link,
-  notFound,
-  redirect,
-} from "@tanstack/react-router";
+﻿import { createFileRoute, Link, notFound, redirect } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import {
   LoaderCircle,
@@ -22,6 +17,7 @@ import {
   Files,
   Users,
   Mail,
+  Trophy,
 } from "lucide-react";
 
 import { NoteCard, type Note as PdfCardNote } from "@/components/PdfCard";
@@ -36,6 +32,7 @@ import {
 } from "@/components/ui/dialog";
 import api from "@/lib/api";
 import { getSessionUser } from "@/lib/auth";
+import { titleTone } from "@/lib/rankings";
 import { getCSRFToken } from "@/lib/utils";
 
 type ProfileData = {
@@ -56,6 +53,12 @@ type ProfileData = {
   following: number;
   courses: string[];
   is_owner: boolean;
+  ranking?: {
+    points: number;
+    rank_title: string;
+    global_rank: number | null;
+    department_rank: number | null;
+  };
 };
 
 type FollowStatusResponse = {
@@ -128,9 +131,7 @@ export const Route = createFileRoute("/profile/$id")({
     }
 
     try {
-      const { data } = await api.get<ProfileData>(
-        `/accounts/profile/${serverId}/`,
-      );
+      const { data } = await api.get<ProfileData>(`/accounts/profile/${serverId}/`);
 
       return { profile: data };
     } catch {
@@ -166,9 +167,7 @@ function Profile() {
   const [notesLoading, setNotesLoading] = useState(true);
   const [notesError, setNotesError] = useState("");
 
-  const [tab, setTab] = useState<"approved" | "pending" | "rejected">(
-    "approved",
-  );
+  const [tab, setTab] = useState<"approved" | "pending" | "rejected">("approved");
 
   useEffect(() => {
     setFollowersCount(profile.followers);
@@ -262,14 +261,11 @@ function Profile() {
       setFollowError("");
 
       try {
-        const { data } = await api.get<FollowStatusResponse>(
-          "/social/is_following/",
-          {
-            params: {
-              user_id: user.id,
-            },
+        const { data } = await api.get<FollowStatusResponse>("/social/is_following/", {
+          params: {
+            user_id: user.id,
           },
-        );
+        });
 
         if (!cancelled && data.status === "success") {
           setFollow(data.is_following);
@@ -306,18 +302,15 @@ function Profile() {
       const csrfToken = await getCSRFToken();
       api.defaults.headers.post["X-CSRFToken"] = csrfToken;
 
-      const { data } = await api.post<FollowStatusResponse>(
-        `/social/follow/${user.id}/`,
-        { action: follow ? "unfollow" : "follow" },
-      );
+      const { data } = await api.post<FollowStatusResponse>(`/social/follow/${user.id}/`, {
+        action: follow ? "unfollow" : "follow",
+      });
 
       if (data.status === "success") {
         setFollow(data.is_following);
 
         if (data.is_following !== previousFollow) {
-          setFollowersCount((previous) =>
-            Math.max(0, previous + (data.is_following ? 1 : -1)),
-          );
+          setFollowersCount((previous) => Math.max(0, previous + (data.is_following ? 1 : -1)));
         }
       } else {
         setFollowError("Unable to update follow status. Please try again.");
@@ -338,13 +331,11 @@ function Profile() {
 
     try {
       const endpoint =
-        type === "followers"
-          ? `/social/followers/${user.id}/`
-          : `/social/following/${user.id}/`;
+        type === "followers" ? `/social/followers/${user.id}/` : `/social/following/${user.id}/`;
       const { data } = await api.get<FollowListResponse>(endpoint);
 
       if (data.status === "success") {
-        setFollowList(type === "followers" ? data.followers ?? [] : data.following ?? []);
+        setFollowList(type === "followers" ? (data.followers ?? []) : (data.following ?? []));
       } else {
         setFollowListError(`Unable to load ${type}.`);
       }
@@ -446,8 +437,7 @@ function Profile() {
             label: "Section",
             value: user.section,
           },
-        ]
-    ),
+        ]),
   ].filter((detail) => detail.value);
 
   const tabs = [
@@ -495,27 +485,17 @@ function Profile() {
   return (
     <main className="mx-auto max-w-7xl px-4 py-6 sm:px-8 sm:py-10">
       <div className="mb-8 flex items-center justify-between border-b border-border pb-4">
-        <Button
-          asChild
-          variant="ghost"
-          size="sm"
-          className="-ml-3 text-muted-foreground"
-        >
+        <Button asChild variant="ghost" size="sm" className="-ml-3 text-muted-foreground">
           <Link to="/feeds">
             <ArrowLeft aria-hidden="true" />
             Back to feed
           </Link>
         </Button>
-        <span className="text-xs font-medium text-muted-foreground">
-          Suggestion Hub / Profile
-        </span>
+        <span className="text-xs font-medium text-muted-foreground">Suggestion Hub / Profile</span>
       </div>
 
       {/* Editorial identity header: no decorative banner or floating container. */}
-      <section
-        aria-labelledby="profile-name"
-        className="border-b border-border pb-8 sm:pb-10"
-      >
+      <section aria-labelledby="profile-name" className="border-b border-border pb-8 sm:pb-10">
         <div className="flex flex-col gap-6 sm:flex-row sm:items-center sm:gap-7">
           <div
             aria-hidden="true"
@@ -525,10 +505,7 @@ function Profile() {
           </div>
           <div className="min-w-0 flex-1">
             <div className="mb-3 flex flex-wrap items-center gap-2 text-xs font-medium text-muted-foreground">
-              <GraduationCap
-                className="size-4 text-primary"
-                aria-hidden="true"
-              />
+              <GraduationCap className="size-4 text-primary" aria-hidden="true" />
               <span>{isTeacher ? "Faculty" : "Student"}</span>
               {user.department_name && (
                 <>
@@ -655,13 +632,14 @@ function Profile() {
                 <LoaderCircle className="size-6 animate-spin text-primary" aria-label="Loading" />
               </div>
             ) : followListError ? (
-              <p role="alert" className="rounded-md bg-destructive/5 px-4 py-3 text-sm text-destructive">
+              <p
+                role="alert"
+                className="rounded-md bg-destructive/5 px-4 py-3 text-sm text-destructive"
+              >
                 {followListError}
               </p>
             ) : followList.length === 0 ? (
-              <p className="py-6 text-center text-sm text-muted-foreground">
-                No users found.
-              </p>
+              <p className="py-6 text-center text-sm text-muted-foreground">No users found.</p>
             ) : (
               <ul className="divide-y divide-border">
                 {followList.map((person) => {
@@ -686,7 +664,9 @@ function Profile() {
                           </span>
                           <span className="min-w-0">
                             <span className="block truncate font-semibold">{person.full_name}</span>
-                            <span className="block text-xs capitalize text-muted-foreground">{person.role}</span>
+                            <span className="block text-xs capitalize text-muted-foreground">
+                              {person.role}
+                            </span>
                           </span>
                         </Link>
                         {isMe && followListOpen === "following" && (
@@ -721,6 +701,43 @@ function Profile() {
           className="space-y-8 lg:border-r lg:border-border lg:pr-8"
           aria-label="Academic profile"
         >
+          <section className="rounded-2xl border border-border bg-card p-5">
+            <div className="flex items-center gap-2 text-sm font-semibold">
+              <Trophy className="size-4 text-primary" />
+              Ranking
+            </div>
+            <span
+              className={`mt-4 inline-flex rounded-full border px-3 py-1 text-xs font-medium ${titleTone(
+                profile.ranking?.rank_title ?? "Newbie",
+              )}`}
+            >
+              {profile.ranking?.rank_title ?? "Newbie"}
+            </span>
+            <dl className="mt-4 grid grid-cols-2 gap-3">
+              <div>
+                <dt className="text-xs text-muted-foreground">Global</dt>
+                <dd className="mt-1 text-lg font-semibold tabular-nums">
+                  {profile.ranking?.global_rank ? `#${profile.ranking.global_rank}` : "—"}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-xs text-muted-foreground">Department</dt>
+                <dd className="mt-1 text-lg font-semibold tabular-nums">
+                  {profile.ranking?.department_rank ? `#${profile.ranking.department_rank}` : "—"}
+                </dd>
+              </div>
+            </dl>
+            <p className="mt-3 text-sm text-muted-foreground">
+              {(profile.ranking?.points ?? 0).toLocaleString()} points
+            </p>
+            <Link
+              to="/leaderboard"
+              className="mt-4 inline-flex items-center gap-1 text-sm font-medium text-primary hover:underline"
+            >
+              View leaderboard
+            </Link>
+          </section>
+
           <section>
             <h2 className="mb-5 text-sm font-semibold">Academic details</h2>
             {details.length > 0 ? (
@@ -733,33 +750,25 @@ function Profile() {
                     />
                     <div className="min-w-0">
                       <dt className="text-xs text-muted-foreground">{label}</dt>
-                      <dd className="mt-1 break-words text-sm font-medium">
-                        {value}
-                      </dd>
+                      <dd className="mt-1 break-words text-sm font-medium">{value}</dd>
                     </div>
                   </div>
                 ))}
               </dl>
             ) : (
-              <p className="text-sm text-muted-foreground">
-                No academic details added.
-              </p>
+              <p className="text-sm text-muted-foreground">No academic details added.</p>
             )}
           </section>
         </aside>
 
         <section aria-labelledby="uploads-title" className="min-w-0">
           <div className="flex flex-wrap items-center justify-between gap-3">
-            <h2
-              id="uploads-title"
-              className="font-display text-2xl font-semibold"
-            >
+            <h2 id="uploads-title" className="font-display text-2xl font-semibold">
               {isMe ? "My uploads" : "Published uploads"}
             </h2>
             {!notesLoading && !notesError && (
               <span className="text-xs text-muted-foreground">
-                {sectionProps.notes.length}{" "}
-                {sectionProps.notes.length === 1 ? "upload" : "uploads"}
+                {sectionProps.notes.length} {sectionProps.notes.length === 1 ? "upload" : "uploads"}
               </span>
             )}
           </div>
@@ -779,9 +788,7 @@ function Profile() {
                   aria-pressed={tab === key}
                   onClick={() => setTab(key)}
                   className={
-                    tab === key
-                      ? "bg-accent text-accent-foreground"
-                      : "text-muted-foreground"
+                    tab === key ? "bg-accent text-accent-foreground" : "text-muted-foreground"
                   }
                 >
                   <Icon aria-hidden="true" />
@@ -793,11 +800,7 @@ function Profile() {
           )}
 
           {notesLoading && (
-            <div
-              role="status"
-              aria-label="Loading uploads"
-              className="mt-6 space-y-4"
-            >
+            <div role="status" aria-label="Loading uploads" className="mt-6 space-y-4">
               {Array.from({ length: 3 }).map((_, index) => (
                 <div
                   key={index}
@@ -822,9 +825,7 @@ function Profile() {
               {notesError}
             </p>
           )}
-          {!notesLoading && !notesError && (
-            <NotesSection {...sectionProps} showStatus={isMe} />
-          )}
+          {!notesLoading && !notesError && <NotesSection {...sectionProps} showStatus={isMe} />}
         </section>
       </div>
     </main>
@@ -849,9 +850,7 @@ function NotesSection({
       {showStatus && (
         <div className="mb-5">
           <h3 className="text-sm font-medium">{title}</h3>
-          <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-            {description}
-          </p>
+          <p className="mt-1 text-xs leading-relaxed text-muted-foreground">{description}</p>
         </div>
       )}
       {notes.length === 0 ? (
@@ -884,9 +883,7 @@ function NotesSection({
               },
             }[note.review_status];
             const rejectionReason =
-              note.review_comment ||
-              note.review_reason ||
-              note.rejection_reason;
+              note.review_comment || note.review_reason || note.rejection_reason;
             const cardNote: PdfCardNote = {
               ...note,
               course_code: note.course_code ?? "",
@@ -898,16 +895,11 @@ function NotesSection({
                     <span
                       className={`inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-xs font-medium ${statusConfig.className}`}
                     >
-                      <statusConfig.Icon
-                        className="size-3.5"
-                        aria-hidden="true"
-                      />
+                      <statusConfig.Icon className="size-3.5" aria-hidden="true" />
                       {statusConfig.label}
                     </span>
                     {note.course_code && (
-                      <span className="text-xs text-muted-foreground">
-                        {note.course_code}
-                      </span>
+                      <span className="text-xs text-muted-foreground">{note.course_code}</span>
                     )}
                   </div>
                 )}
@@ -919,8 +911,7 @@ function NotesSection({
                       Rejection reason
                     </p>
                     <p className="mt-2 break-words text-sm leading-relaxed">
-                      {rejectionReason ||
-                        "No rejection reason was provided by the administrator."}
+                      {rejectionReason || "No rejection reason was provided by the administrator."}
                     </p>
                   </div>
                 )}

@@ -1827,3 +1827,40 @@ Report submission is implemented at `/notes/<note_id>/report/`.
 - `/social/comments/` supports `GET` and `POST` only; it does not support `DELETE` or `PUT`.
 - `/feeds/get_feeds_by_following/`, `/notes/get_notes/`, and the review list endpoints use joins that can produce duplicate note rows when multiple review rows exist for the same note.
 - `/ai/ask/` requires `GEMINI_API_KEY` or `OPENROUTER_API_KEY` in the backend environment.
+
+---
+
+## Rankings API
+
+Rankings are stored in `rank_titles` and `user_rankings`. The backend API recalculates a user's points after uploads, approvals, ratings, views, follows, comments and reviews. There are no database triggers for ranking values.
+
+Points formula:
+
+- Student: `approved_uploads×10 + ratings_received×2 + floor(views_received/10) + followers×2 + comments_received`
+- Teacher: `completed_reviews×15 + followers×2 + comments_received`
+- `completed_reviews` counts distinct notes with an approved or rejected decision, so the same teacher re-reviewing the same note adds no extra points.
+- Titles: `0-49 Newbie`, `50-149 Pupil`, `150-349 Expert`, `350-699 Master`, `700-1199 Grandmaster`, `1200+ Legendary Grandmaster`.
+
+### GET /rankings/titles/
+
+Returns the title ranges.
+
+Response:
+
+```json
+{"status":"success","titles":[{"title":"Newbie","start_point":0,"end_point":49}]}
+```
+
+### GET /rankings/users/
+
+Query parameters: `role` (`student` or `teacher`, default `student`), `scope` (`all` or `department`, default `all`), `department_id` (required for department scope), `limit` (1-100, default 20), `offset` (default 0).
+
+Response includes `status`, `role`, `scope`, `total`, `entries` and `viewer`. Each entry includes `rank`, `user_id`, `full_name`, `department_name`, `points`, `title`, `stats`, `is_me` and `is_following`.
+
+### GET /rankings/me/
+
+Login required. Returns the session user's stored ranking, next title and points remaining.
+
+### Management command
+
+Run `uv run python manage.py rebuild_rankings` after applying `sql/001_rankings.sql` to an existing database or after editing ranking data directly.

@@ -220,7 +220,13 @@ review is deleted).
 
 ---
 
-## 12. Known gaps and rough edges
+## 12. User rankings
+
+A public `/leaderboard` page ranks active students and teachers by contribution points. Student points come from approved uploads, ratings received, unique views received, followers and comments received. Teacher points come from completed distinct-note reviews, followers and comments received. Points unlock the titles Newbie, Pupil, Expert, Master, Grandmaster and Legendary Grandmaster. The board supports global and department scopes.
+
+---
+
+## 13. Known gaps and rough edges
 
 This is a student project under active development. The main unfinished or
 risky areas:

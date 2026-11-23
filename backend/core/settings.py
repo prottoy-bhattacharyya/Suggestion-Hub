@@ -86,6 +86,7 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     'corsheaders',
     'hub',
+    'rankings',
 ]
 
 MIDDLEWARE = [

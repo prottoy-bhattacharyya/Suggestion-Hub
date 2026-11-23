@@ -3,6 +3,11 @@ from django.http import JsonResponse
 from django.shortcuts import render
 from core.utils import get_db_connection
 from django.views.decorators.csrf import csrf_exempt
+from rankings.service import (
+    get_note_uploader,
+    rebuild_rank_positions,
+    recalculate_user_rank,
+)
 
 # Create your views here.
 def follow(request, user_id):
@@ -63,6 +68,8 @@ def follow(request, user_id):
                     "DELETE FROM follows WHERE follower_id = %s AND following_id = %s",
                     (follower_id, user_id),
                 )
+            recalculate_user_rank(user_id, cursor=cursor, rebuild=False)
+            rebuild_rank_positions(cursor)
             conn.commit()
 
             # Get the updated follower count and following status
@@ -156,6 +163,8 @@ def unfollow(request, user_id):
                 """,
                 (follower_id, user_id),
             )
+            recalculate_user_rank(user_id, cursor=cursor, rebuild=False)
+            rebuild_rank_positions(cursor)
             conn.commit()
 
         return JsonResponse({"status": "success", "message": "Unfollowed."})
@@ -225,6 +234,10 @@ def comments(request):
                 """,
                 (session_user["id"], note_id, comment_text),
             )
+            uploader_id = get_note_uploader(note_id, cursor=cursor)
+            if uploader_id:
+                recalculate_user_rank(uploader_id, cursor=cursor, rebuild=False)
+                rebuild_rank_positions(cursor)
             conn.commit()
 
         return JsonResponse({"status": "success", "message": "Comment added."})

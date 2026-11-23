@@ -12,6 +12,8 @@ USE suggestion_hub;
 
 -- Drop in reverse dependency order (safe re-run during development)
 -- SET FOREIGN_KEY_CHECKS = 0;
+-- DROP TABLE IF EXISTS user_rankings;
+-- DROP TABLE IF EXISTS rank_titles;
 -- DROP TABLE IF EXISTS reports;
 -- DROP TABLE IF EXISTS notifications;
 -- DROP TABLE IF EXISTS follows;
@@ -273,6 +275,59 @@ CREATE TABLE IF NOT EXISTS reports (
   CONSTRAINT fk_reports_reporter
     FOREIGN KEY (reporter_id) REFERENCES users (id)
     ON DELETE CASCADE ON UPDATE CASCADE
+) ENGINE=InnoDB;
+
+-- ---------------------------------------------------------------------
+-- rank_titles (points ranges -> display titles)
+-- ---------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS rank_titles (
+  title       VARCHAR(50) NOT NULL,
+  start_point INT UNSIGNED NOT NULL,
+  end_point   INT UNSIGNED NOT NULL,
+  PRIMARY KEY (title),
+  UNIQUE KEY uq_rank_titles_start (start_point),
+  UNIQUE KEY uq_rank_titles_end (end_point),
+  CONSTRAINT chk_rank_titles_range CHECK (end_point >= start_point)
+) ENGINE=InnoDB;
+
+INSERT IGNORE INTO rank_titles (title, start_point, end_point) VALUES
+  ('Newbie', 0, 49),
+  ('Pupil', 50, 149),
+  ('Expert', 150, 349),
+  ('Master', 350, 699),
+  ('Grandmaster', 700, 1199),
+  ('Legendary Grandmaster', 1200, 4294967295);
+
+-- ---------------------------------------------------------------------
+-- user_rankings (API-maintained points, titles and positions)
+-- ---------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS user_rankings (
+  user_id            INT UNSIGNED NOT NULL,
+  points             INT UNSIGNED NOT NULL DEFAULT 0,
+  rank_title         VARCHAR(50) NOT NULL DEFAULT 'Newbie',
+  approved_uploads   INT UNSIGNED NOT NULL DEFAULT 0,
+  ratings_received   INT UNSIGNED NOT NULL DEFAULT 0,
+  views_received     INT UNSIGNED NOT NULL DEFAULT 0,
+  followers          INT UNSIGNED NOT NULL DEFAULT 0,
+  comments_received  INT UNSIGNED NOT NULL DEFAULT 0,
+  completed_reviews  INT UNSIGNED NOT NULL DEFAULT 0,
+  is_ranked          TINYINT(1) NOT NULL DEFAULT 1,
+  rank_global        INT UNSIGNED NULL,
+  rank_department    INT UNSIGNED NULL,
+  stats_updated_at   DATETIME NULL,
+  rank_updated_at    DATETIME NULL,
+  PRIMARY KEY (user_id),
+  KEY idx_user_rankings_points (points DESC),
+  KEY idx_user_rankings_ranked_points (is_ranked, points DESC),
+  KEY idx_user_rankings_title (rank_title),
+  KEY idx_user_rankings_global_rank (rank_global),
+  KEY idx_user_rankings_department_rank (rank_department),
+  CONSTRAINT fk_user_rankings_user
+    FOREIGN KEY (user_id) REFERENCES users (id)
+    ON DELETE CASCADE ON UPDATE CASCADE,
+  CONSTRAINT fk_user_rankings_title
+    FOREIGN KEY (rank_title) REFERENCES rank_titles (title)
+    ON DELETE RESTRICT ON UPDATE CASCADE
 ) ENGINE=InnoDB;
 
 -- ---------------------------------------------------------------------

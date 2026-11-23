@@ -2,6 +2,10 @@ import json
 from django.http import JsonResponse
 from django.shortcuts import render
 from core.utils import get_db_connection
+from rankings.service import (
+    rebuild_rank_positions,
+    recalculate_users_ranks,
+)
 
 
 # Create your views here.
@@ -44,6 +48,18 @@ def submit_review(request):
                 VALUES (%s, %s, %s, %s)""", 
                 (note_id, teacher_id, decision, comment)
             )
+
+            with conn.cursor() as rank_cursor:
+                rank_cursor.execute(
+                    "SELECT uploader_id FROM notes WHERE id = %s",
+                    (note_id,),
+                )
+                note_row = rank_cursor.fetchone()
+                uploader_id = note_row[0] if note_row else None
+                recalculate_users_ranks(
+                    [teacher_id, uploader_id], cursor=rank_cursor, rebuild=False
+                )
+                rebuild_rank_positions(rank_cursor)
 
             conn.commit()
             

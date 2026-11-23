@@ -8,6 +8,7 @@ import {
   Search,
   ShieldCheck,
   Sparkles,
+  Trophy,
   UploadCloud,
   X,
 } from "lucide-react";
@@ -20,6 +21,7 @@ import { getCSRFToken } from "@/lib/utils";
 const nav = [
   { to: "/feeds", label: "Feed", Icon: Home },
   { to: "/search", label: "Search", Icon: Search },
+  { to: "/leaderboard", label: "Leaderboard", Icon: Trophy },
   { to: "/upload", label: "Upload", Icon: UploadCloud },
 ] as const;
 

@@ -12,6 +12,7 @@ from django.views.decorators.clickjacking import xframe_options_exempt
 
 from .utils import getFileHash, save_file
 from core.utils import get_db_connection
+from rankings.service import rebuild_rank_positions, recalculate_user_rank
 
 MAX_PDF_BYTES = 20 * 1024 * 1024
 MAX_VIDEO_BYTES = 500 * 1024 * 1024
@@ -232,6 +233,8 @@ def upload_note(request):
                     ),
                 )
 
+            recalculate_user_rank(uploader_id, cursor=insert_cursor, rebuild=False)
+            rebuild_rank_positions(insert_cursor)
             conn.commit()
             shutil.rmtree(upload_dir, ignore_errors=True)
             return JsonResponse(
@@ -310,6 +313,8 @@ def upload_note(request):
                     (uploader_id, course_id, title, description, type, intake, section, file_path, file_type, file_hash)
                 )
 
+            recalculate_user_rank(uploader_id, cursor=insert_cursor, rebuild=False)
+            rebuild_rank_positions(insert_cursor)
             conn.commit()
             return JsonResponse({'status': 'success', 'message': 'Note uploaded successfully'}, status=201)
     except Exception as e:
@@ -658,6 +663,8 @@ def note_view(request, note_id):
                         "UPDATE notes SET view_count = %s WHERE id = %s",
                         (view_count, note_id),
                     )
+                    recalculate_user_rank(uploader_id, cursor=cursor, rebuild=False)
+                    rebuild_rank_positions(cursor)
                     conn.commit()
                 else:
                     reason = "duplicate"
@@ -877,7 +884,6 @@ def note_rate(request, note_id):
                 """,
                 (note_id, viewer_id, stars),
             )
-            conn.commit()
 
             cursor.execute(
                 "SELECT AVG(stars), COUNT(*) FROM ratings WHERE note_id = %s",
@@ -889,6 +895,8 @@ def note_rate(request, note_id):
                 "UPDATE notes SET rating_avg = %s, rating_count = %s WHERE id = %s",
                 (avg or 0, count, note_id),
             )
+            recalculate_user_rank(uploader_id, cursor=cursor, rebuild=False)
+            rebuild_rank_positions(cursor)
             conn.commit()
     except Exception as e:
         conn.rollback()

@@ -360,6 +360,45 @@ For a teacher, `courses` contains assigned course codes:
 }
 ```
 
+#### Update profile settings
+
+- `POST /accounts/profile/update/` updates the logged-in user's `fullName`, `email`, `departmentId`, `studentId`, and `section`. Send a JSON body with the `X-CSRFToken` header from `/accounts/csrf/`; omitted fields keep their current values.
+- Email is changed immediately without a verification email. Email and student ID uniqueness is checked against other users, and a blank `studentId` is stored as `NULL` so the unique key allows multiple absent values.
+- `studentId` and `section` are accepted only for `student` accounts. Role, password, intake, and verification flags cannot be changed through this endpoint.
+- Changing `departmentId` refreshes cached department ranks. Existing notes and teacher-course assignments are not changed.
+- `/accounts/me/` refreshes these editable fields into the session on every request.
+
+`200 OK`:
+
+```json
+{
+  "status": "success",
+  "message": "Settings updated successfully.",
+  "user": {
+    "id": 1,
+    "email": "student@example.com",
+    "full_name": "Student Name",
+    "role": "student",
+    "student_id": "20240001",
+    "department_id": 1,
+    "intake": "24",
+    "section": "A",
+    "avatar_url": "http://localhost:8000/accounts/avatar/1/"
+  }
+}
+```
+
+`400 Bad Request`:
+
+```json
+{
+  "status": "failed",
+  "message": "Email already exists."
+}
+```
+
+`401 Unauthorized` uses the standard `{"status": "failed", "error": "You need to login first."}` response.
+
 ---
 
 ### 7. Current user profile alias

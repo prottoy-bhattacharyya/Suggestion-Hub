@@ -1,8 +1,11 @@
 import json
 import os
-from django.shortcuts import render
+import re
+
 from django.http import FileResponse, JsonResponse
 from django.middleware.csrf import get_token
+from django.shortcuts import render
+
 from core.utils import (
     avatar_absolute_path,
     avatar_relative_path,
@@ -11,6 +14,7 @@ from core.utils import (
     process_avatar,
     write_avatar_file,
 )
+from rankings.service import rebuild_rank_positions
 
 # Create your views here.
 def csrf(request):
@@ -83,7 +87,15 @@ def me(request):
     with get_db_connection() as conn:
         cursor = conn.cursor(dictionary=True)
 
-        cursor.execute("SELECT role, is_active, is_verified, avatar FROM users WHERE id = %s", (user['id'],))
+        cursor.execute(
+            """
+            SELECT role, is_active, is_verified, avatar, email, full_name,
+                   student_id, department_id, intake, section, designation,
+                   employee_id
+            FROM users WHERE id = %s
+            """,
+            (user['id'],),
+        )
         user_verification = cursor.fetchone()
 
         if not user_verification:
@@ -118,6 +130,18 @@ def me(request):
     
     if user:
         user = dict(user)
+        for key in (
+            "email",
+            "full_name",
+            "student_id",
+            "department_id",
+            "intake",
+            "section",
+            "designation",
+            "employee_id",
+        ):
+            if key in user_verification:
+                user[key] = user_verification[key]
         user["avatar_url"] = avatar_url(request, user["id"], user_verification["avatar"])
         request.session['user'] = user
         return JsonResponse(
@@ -224,6 +248,166 @@ def login(request):
 def logout(request):
     request.session.flush()
     return JsonResponse({"status": "success", "message": "Logged out."})
+
+
+def update_profile(request):
+    if request.method != "POST":
+        return JsonResponse({"status": "failed", "message": "Invalid request method."}, status=405)
+
+    session_user = request.session.get("user")
+    if not session_user:
+        return JsonResponse({"status": "failed", "error": "You need to login first."}, status=401)
+
+    user_id = session_user.get("id")
+    try:
+        data = json.loads(request.body or "{}")
+    except (json.JSONDecodeError, TypeError):
+        return JsonResponse({"status": "failed", "message": "Invalid JSON body."}, status=400)
+
+    if not isinstance(data, dict):
+        return JsonResponse({"status": "failed", "message": "Invalid JSON body."}, status=400)
+
+    conn = get_db_connection()
+    try:
+        with conn.cursor(dictionary=True) as cursor:
+            cursor.execute(
+                """
+                SELECT role, email, full_name, student_id, department_id,
+                       intake, section, designation, employee_id, avatar
+                FROM users WHERE id = %s
+                """,
+                (user_id,),
+            )
+            db_user = cursor.fetchone()
+            if not db_user:
+                return JsonResponse({"status": "failed", "message": "User not found."}, status=404)
+
+            role = db_user["role"]
+            full_name = str(data.get("fullName", db_user["full_name"]) or "").strip()
+            email = str(data.get("email", db_user["email"]) or "").strip()
+
+            if not full_name or len(full_name) > 150:
+                return JsonResponse(
+                    {"status": "failed", "message": "Name must be between 1 and 150 characters."},
+                    status=400,
+                )
+
+            if len(email) > 254 or not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", email):
+                return JsonResponse(
+                    {"status": "failed", "message": "Enter a valid email address."},
+                    status=400,
+                )
+
+            department_raw = data.get("departmentId", db_user["department_id"])
+            if department_raw in (None, ""):
+                department_id = None
+            else:
+                try:
+                    department_id = int(department_raw)
+                except (TypeError, ValueError):
+                    return JsonResponse(
+                        {"status": "failed", "message": "Select a valid department."},
+                        status=400,
+                    )
+                cursor.execute("SELECT id FROM departments WHERE id = %s", (department_id,))
+                if not cursor.fetchone():
+                    return JsonResponse(
+                        {"status": "failed", "message": "Select a valid department."},
+                        status=400,
+                    )
+
+            if role != "student" and ("studentId" in data or "section" in data):
+                return JsonResponse(
+                    {"status": "failed", "message": "Student fields can only be changed by students."},
+                    status=400,
+                )
+
+            if role == "student":
+                student_raw = data.get("studentId", db_user["student_id"])
+                section_raw = data.get("section", db_user["section"])
+                student_id = str(student_raw).strip() if student_raw not in (None, "") else None
+                section = str(section_raw).strip() if section_raw not in (None, "") else None
+
+                if student_id and len(student_id) > 30:
+                    return JsonResponse(
+                        {"status": "failed", "message": "Student ID must be 30 characters or fewer."},
+                        status=400,
+                    )
+                if section and len(section) > 10:
+                    return JsonResponse(
+                        {"status": "failed", "message": "Section must be 10 characters or fewer."},
+                        status=400,
+                    )
+            else:
+                student_id = db_user["student_id"]
+                section = db_user["section"]
+
+            cursor.execute(
+                "SELECT COUNT(*) AS total FROM users WHERE email = %s AND id <> %s",
+                (email, user_id),
+            )
+            if cursor.fetchone()["total"]:
+                return JsonResponse(
+                    {"status": "failed", "message": "Email already exists."},
+                    status=400,
+                )
+
+            if student_id:
+                cursor.execute(
+                    "SELECT COUNT(*) AS total FROM users WHERE student_id = %s AND id <> %s",
+                    (student_id, user_id),
+                )
+                if cursor.fetchone()["total"]:
+                    return JsonResponse(
+                        {"status": "failed", "message": "Student ID already exists."},
+                        status=400,
+                    )
+
+            department_changed = department_id != db_user["department_id"]
+            cursor.execute(
+                """
+                UPDATE users
+                SET full_name = %s, email = %s, department_id = %s,
+                    student_id = %s, section = %s
+                WHERE id = %s
+                """,
+                (full_name, email, department_id, student_id, section, user_id),
+            )
+            if department_changed:
+                rebuild_rank_positions(cursor=cursor)
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        return JsonResponse({"status": "failed", "message": "Unable to update settings."}, status=500)
+    finally:
+        conn.close()
+
+    updated_user = dict(session_user)
+    updated_user.update(
+        {
+            "email": email,
+            "full_name": full_name,
+            "role": role,
+            "department_id": department_id,
+            "avatar_url": avatar_url(request, user_id, db_user["avatar"]),
+        }
+    )
+    if role == "student":
+        updated_user["student_id"] = student_id
+        updated_user["intake"] = db_user["intake"]
+        updated_user["section"] = section
+    else:
+        updated_user["designation"] = db_user["designation"]
+        updated_user["employee_id"] = db_user["employee_id"]
+    request.session["user"] = updated_user
+
+    return JsonResponse(
+        {
+            "status": "success",
+            "message": "Settings updated successfully.",
+            "user": updated_user,
+        }
+    )
 
 
 def profile(request, user_id):

@@ -12,6 +12,7 @@ import {
   Hash,
   Briefcase,
   Camera,
+  Settings,
   UserPlus,
   UserCheck,
   Inbox,
@@ -647,6 +648,15 @@ function Profile() {
               )}
             </div>
           </div>
+          {isMe && (
+            <Link
+              to="/settings"
+              className="inline-flex h-11 w-full shrink-0 items-center justify-center gap-2 rounded-md border border-input bg-background px-6 text-sm font-medium shadow-sm transition-colors hover:bg-accent hover:text-accent-foreground sm:w-auto"
+            >
+              <Settings className="size-4" aria-hidden="true" />
+              Edit settings
+            </Link>
+          )}
           {!isMe && (
             <Button
               type="button"

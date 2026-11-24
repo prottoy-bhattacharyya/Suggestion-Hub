@@ -16,6 +16,7 @@ import { Route as FeedsRouteImport } from './routes/feeds'
 import { Route as LeaderboardRouteImport } from './routes/leaderboard'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as SearchRouteImport } from './routes/search'
+import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as SignupRouteImport } from './routes/signup'
 import { Route as TeacherRouteImport } from './routes/teacher'
 import { Route as UploadRouteImport } from './routes/upload'
@@ -57,6 +58,11 @@ const SearchRoute = SearchRouteImport.update({
   path: '/search',
   getParentRoute: () => rootRouteImport,
 } as any)
+const SettingsRoute = SettingsRouteImport.update({
+  id: '/settings',
+  path: '/settings',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const SignupRoute = SignupRouteImport.update({
   id: '/signup',
   path: '/signup',
@@ -91,6 +97,7 @@ export interface FileRoutesByFullPath {
   '/leaderboard': typeof LeaderboardRoute
   '/login': typeof LoginRoute
   '/search': typeof SearchRoute
+  '/settings': typeof SettingsRoute
   '/signup': typeof SignupRoute
   '/teacher': typeof TeacherRoute
   '/upload': typeof UploadRoute
@@ -105,6 +112,7 @@ export interface FileRoutesByTo {
   '/leaderboard': typeof LeaderboardRoute
   '/login': typeof LoginRoute
   '/search': typeof SearchRoute
+  '/settings': typeof SettingsRoute
   '/signup': typeof SignupRoute
   '/teacher': typeof TeacherRoute
   '/upload': typeof UploadRoute
@@ -120,6 +128,7 @@ export interface FileRoutesById {
   '/leaderboard': typeof LeaderboardRoute
   '/login': typeof LoginRoute
   '/search': typeof SearchRoute
+  '/settings': typeof SettingsRoute
   '/signup': typeof SignupRoute
   '/teacher': typeof TeacherRoute
   '/upload': typeof UploadRoute
@@ -136,6 +145,7 @@ export interface FileRouteTypes {
     | '/leaderboard'
     | '/login'
     | '/search'
+    | '/settings'
     | '/signup'
     | '/teacher'
     | '/upload'
@@ -150,6 +160,7 @@ export interface FileRouteTypes {
     | '/leaderboard'
     | '/login'
     | '/search'
+    | '/settings'
     | '/signup'
     | '/teacher'
     | '/upload'
@@ -164,6 +175,7 @@ export interface FileRouteTypes {
     | '/leaderboard'
     | '/login'
     | '/search'
+    | '/settings'
     | '/signup'
     | '/teacher'
     | '/upload'
@@ -179,6 +191,7 @@ export interface RootRouteChildren {
   LeaderboardRoute: typeof LeaderboardRoute
   LoginRoute: typeof LoginRoute
   SearchRoute: typeof SearchRoute
+  SettingsRoute: typeof SettingsRoute
   SignupRoute: typeof SignupRoute
   TeacherRoute: typeof TeacherRoute
   UploadRoute: typeof UploadRoute
@@ -237,6 +250,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SearchRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/settings': {
+      id: '/settings'
+      path: '/settings'
+      fullPath: '/settings'
+      preLoaderRoute: typeof SettingsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/signup': {
       id: '/signup'
       path: '/signup'
@@ -283,6 +303,7 @@ const rootRouteChildren: RootRouteChildren = {
   LeaderboardRoute: LeaderboardRoute,
   LoginRoute: LoginRoute,
   SearchRoute: SearchRoute,
+  SettingsRoute: SettingsRoute,
   SignupRoute: SignupRoute,
   TeacherRoute: TeacherRoute,
   UploadRoute: UploadRoute,

@@ -6,6 +6,7 @@ import {
   LogOut,
   Menu,
   Search,
+  Settings,
   ShieldCheck,
   Sparkles,
   Trophy,
@@ -20,10 +21,13 @@ import api from "@/lib/api";
 import { getCSRFToken } from "@/lib/utils";
 
 const nav = [
-  { to: "/feeds", label: "Feed", Icon: Home },
-  { to: "/search", label: "Search", Icon: Search },
-  { to: "/leaderboard", label: "Leaderboard", Icon: Trophy },
-  { to: "/upload", label: "Upload", Icon: UploadCloud },
+  { to: "/feeds", label: "Feed", Icon: Home, requiresAuth: false, role: "any" },
+  { to: "/search", label: "Search", Icon: Search, requiresAuth: false, role: "any" },
+  { to: "/leaderboard", label: "Leaderboard", Icon: Trophy, requiresAuth: false, role: "any" },
+  { to: "/upload", label: "Upload", Icon: UploadCloud, requiresAuth: true, role: "any" },
+  // { to: "/settings", label: "Settings", Icon: Settings, requiresAuth: true, role: "any" },
+  { to: "/analytics", label: "Analytics", Icon: BarChart3, requiresAuth: true, role: "any" },
+  { to: "/teacher", label: "Review", Icon: ShieldCheck, requiresAuth: true, role: "teacher" },
 ] as const;
 
 export function SiteHeader() {
@@ -100,26 +104,21 @@ export function SiteHeader() {
 
         {/* Desktop nav */}
         <nav className="ml-2 hidden items-center gap-1 rounded-full bg-muted p-1 md:flex">
-          {nav.map(({ to, label, Icon }) => (
-            <Link key={to} to={to} className={linkBase} activeProps={{ className: linkActive }}>
-              <Icon className="h-3.5 w-3.5" />
-              {label}
-            </Link>
+          {nav.map(({ to, label, Icon, requiresAuth, role }) => (
+            (!requiresAuth || user) && (role === "any" || user?.role === role) && ( 
+              <Link key={to} to={to} className={linkBase} activeProps={{ className: linkActive }}>
+                <Icon className="h-3.5 w-3.5" />
+                {label}
+              </Link>
+            ) 
+            ||
+            (user?.role == "teacher" && role === "teacher") && (
+              <Link key={to} to={to} className={linkBase} activeProps={{ className: linkActive }}>
+                <Icon className="h-3.5 w-3.5" />
+                {label}
+              </Link>
+            )
           ))}
-
-          {user && (
-            <Link to="/analytics" className={linkBase} activeProps={{ className: linkActive }}>
-              <BarChart3 className="h-3.5 w-3.5" />
-              Analytics
-            </Link>
-          )}
-
-          {user?.role === "teacher" && (
-            <Link to="/teacher" className={linkBase} activeProps={{ className: linkActive }}>
-              <ShieldCheck className="h-3.5 w-3.5" />
-              Review
-            </Link>
-          )}
         </nav>
 
         <div className="ml-auto flex items-center gap-2">
@@ -179,42 +178,21 @@ export function SiteHeader() {
       {menuOpen && (
         <nav className="animate-in fade-in slide-in-from-top-1 border-t border-border/60 bg-background/95 px-4 py-3 backdrop-blur-xl md:hidden">
           <div className="flex flex-col gap-1">
-            {nav.map(({ to, label, Icon }) => (
-              <Link
-                key={to}
-                to={to}
-                onClick={() => setMenuOpen(false)}
-                className="flex items-center gap-3 rounded-xl px-4 py-2.5 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-                activeProps={{ className: "bg-primary/10 text-primary" }}
-              >
-                <Icon className="h-4 w-4" />
+            {nav.map(({ to, label, Icon, requiresAuth, role }) => (
+            (!requiresAuth || user) && (role === "any" || user?.role === role) && ( 
+              <Link key={to} to={to} className={linkBase} activeProps={{ className: linkActive }}>
+                <Icon className="h-3.5 w-3.5" />
                 {label}
               </Link>
-            ))}
-
-            {user && (
-              <Link
-                to="/analytics"
-                onClick={() => setMenuOpen(false)}
-                className="flex items-center gap-3 rounded-xl px-4 py-2.5 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-                activeProps={{ className: "bg-primary/10 text-primary" }}
-              >
-                <BarChart3 className="h-4 w-4" />
-                Analytics
+            ) 
+            ||
+            (user?.role == "teacher" && role === "teacher") && (
+              <Link key={to} to={to} className={linkBase} activeProps={{ className: linkActive }}>
+                <Icon className="h-3.5 w-3.5" />
+                {label}
               </Link>
-            )}
-
-            {user?.role === "teacher" && (
-              <Link
-                to="/teacher"
-                onClick={() => setMenuOpen(false)}
-                className="flex items-center gap-3 rounded-xl px-4 py-2.5 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-                activeProps={{ className: "bg-primary/10 text-primary" }}
-              >
-                <ShieldCheck className="h-4 w-4" />
-                Review
-              </Link>
-            )}
+            )
+          ))}
           </div>
         </nav>
       )}

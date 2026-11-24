@@ -54,8 +54,12 @@ to 12 MB are verified and automatically compressed to a WEBP of at most 2 MB, th
 shown on your profile, the header, feed, search results, PDF pages, comments,
 follower lists, and leaderboard.
 
-**Not implemented**: email verification, password reset, and editing other profile
-fields are on the roadmap — the signup route for verification is commented out.
+**Settings** (`/settings`): logged-in users can edit their name, email,
+department, and, for students, student ID and section. Email changes take effect
+immediately with uniqueness enforced; student-only fields are hidden and rejected
+for other roles. Changing department refreshes cached department ranks. Public
+profile visibility is unchanged. Email verification and password reset remain on
+the roadmap — the signup verification route is commented out.
 
 ---
 

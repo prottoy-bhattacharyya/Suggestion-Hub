@@ -1,7 +1,9 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import {
+  useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type Dispatch,
   type SetStateAction,
@@ -17,6 +19,7 @@ import {
   Check,
   FileText,
   Layers,
+  LoaderCircle,
   Lock,
   SlidersHorizontal,
   Sparkles,
@@ -69,11 +72,40 @@ type FeedNote = Note & {
   file_type?: FileType;
 };
 
+type FilterOptions = {
+  courses: string[];
+  types: string[];
+  intakes: string[];
+  sections: string[];
+  file_types: FileType[];
+};
+
 type NotesResponse = {
   status: string;
   message?: string;
   notes: FeedNote[];
+  total: number;
+  course_count: number;
+  filter_options: FilterOptions;
+  limit: number;
+  offset: number;
+  next_offset: number | null;
+  has_more: boolean;
 };
+
+const emptyFilterOptions: FilterOptions = {
+  courses: [],
+  types: [],
+  intakes: [],
+  sections: [],
+  file_types: [],
+};
+
+function mergeNotes(current: FeedNote[], incoming: FeedNote[]) {
+  const byId = new Map(current.map((note) => [note.id, note]));
+  incoming.forEach((note) => byId.set(note.id, note));
+  return Array.from(byId.values());
+}
 
 function Feed() {
   const [authStatus, setAuthStatus] = useState<AuthStatus>("checking");
@@ -82,6 +114,16 @@ function Feed() {
   const [error, setError] = useState("");
   const [notes, setNotes] = useState<FeedNote[]>([]);
   const [notesLoading, setNotesLoading] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [total, setTotal] = useState(0);
+  const [courseCount, setCourseCount] = useState(0);
+  const [filterOptions, setFilterOptions] = useState<FilterOptions>(emptyFilterOptions);
+  const [hasMore, setHasMore] = useState(false);
+  const [nextOffset, setNextOffset] = useState<number | null>(0);
+
+  const requestRef = useRef<AbortController | null>(null);
+  const loadingMoreRef = useRef(false);
+  const sentinelRef = useRef<HTMLDivElement | null>(null);
 
   // Feed mode
   const [feedMode, setFeedMode] = useState<FeedMode>("normal");
@@ -95,7 +137,6 @@ function Feed() {
   const [minimumRating, setMinimumRating] = useState<number | null>(null);
   const [sortOrder, setSortOrder] = useState<SortOrder>("newest");
 
-  const [shown, setShown] = useState(4);
   const [showFilters, setShowFilters] = useState(false);
 
   // Check Django session
@@ -112,9 +153,7 @@ function Feed() {
 
         if (!active) return;
 
-        const loggedIn = Boolean(
-          response.data.loggedIn ?? response.data.logedIn,
-        );
+        const loggedIn = Boolean(response.data.loggedIn ?? response.data.logedIn);
 
         if (loggedIn && response.data.user) {
           setCurrentUser(response.data.user);
@@ -140,161 +179,143 @@ function Feed() {
     };
   }, []);
 
-  // Fetch the selected feed
-  useEffect(() => {
-    if (authStatus !== "authenticated") return;
+  const buildParams = useCallback(
+    (offset: number) => ({
+      limit: 5,
+      offset,
+      courses: selectedCourses.join(","),
+      types: selectedTypes.join(","),
+      intakes: selectedIntakes.join(","),
+      sections: selectedSections.join(","),
+      file_types: selectedFileTypes.join(","),
+      min_rating: minimumRating ?? "",
+      sort: sortOrder,
+    }),
+    [
+      minimumRating,
+      selectedCourses,
+      selectedFileTypes,
+      selectedIntakes,
+      selectedSections,
+      selectedTypes,
+      sortOrder,
+    ],
+  );
 
-    let active = true;
+  const fetchPage = useCallback(
+    async (offset: number, reset: boolean) => {
+      requestRef.current?.abort();
+      const controller = new AbortController();
+      requestRef.current = controller;
 
-    async function fetchFeed() {
-      try {
+      if (reset) {
         setNotesLoading(true);
-        setError("");
+        setLoadingMore(false);
+        loadingMoreRef.current = false;
         setNotes([]);
+        setTotal(0);
+        setCourseCount(0);
+        setFilterOptions(emptyFilterOptions);
+        setHasMore(false);
+        setNextOffset(0);
+      } else {
+        setLoadingMore(true);
+        loadingMoreRef.current = true;
+      }
+      setError("");
 
+      try {
         const endpoint =
-          feedMode === "following"
-            ? "/feeds/get_feeds_by_following/"
-            : "/feeds/get_feeds/";
+          feedMode === "following" ? "/feeds/get_feeds_by_following/" : "/feeds/get_feeds/";
 
         const response = await api.get<NotesResponse>(endpoint, {
           headers: {
             Accept: "application/json",
           },
+          params: buildParams(offset),
+          signal: controller.signal,
         });
 
-        if (!active) return;
+        if (controller.signal.aborted) return;
 
         if (response.data.status === "success") {
-          setNotes(response.data.notes ?? []);
-        } else {
-          setNotes([]);
-          setError(
-            response.data.message ?? "Could not load the selected feed.",
+          setNotes((current) =>
+            reset ? response.data.notes : mergeNotes(current, response.data.notes),
           );
+          setTotal(response.data.total);
+          setCourseCount(response.data.course_count);
+          setFilterOptions(response.data.filter_options ?? emptyFilterOptions);
+          setHasMore(response.data.has_more);
+          setNextOffset(response.data.next_offset ?? offset + response.data.notes.length);
+        } else {
+          if (reset) setNotes([]);
+          setError(response.data.message ?? "Could not load the selected feed.");
         }
       } catch (err) {
-        console.error("Feed loading failed:", err);
+        if (controller.signal.aborted || axios.isCancel(err)) return;
 
-        if (active) {
-          setNotes([]);
-
-          setError(
-            axios.isAxiosError(err)
-              ? err.response?.data?.error ??
-                  err.response?.data?.detail ??
-                  "Could not load notes. Please check the feed API endpoint."
-              : "An unexpected error occurred while loading notes.",
-          );
-        }
+        if (reset) setNotes([]);
+        setError(
+          axios.isAxiosError(err)
+            ? (err.response?.data?.error ??
+                err.response?.data?.detail ??
+                "Could not load notes. Please check the feed API endpoint.")
+            : "An unexpected error occurred while loading notes.",
+        );
       } finally {
-        if (active) setNotesLoading(false);
+        if (!controller.signal.aborted) {
+          setNotesLoading(false);
+          setLoadingMore(false);
+          loadingMoreRef.current = false;
+        }
       }
-    }
+    },
+    [buildParams, feedMode],
+  );
 
-    void fetchFeed();
+  useEffect(() => {
+    if (authStatus !== "authenticated") return;
+
+    void fetchPage(0, true);
 
     return () => {
-      active = false;
+      requestRef.current?.abort();
     };
-  }, [authStatus, feedMode]);
+  }, [authStatus, fetchPage]);
 
-  // Generate filter options dynamically from the currently loaded feed
-  const courses = useMemo(
-    () =>
-      [...new Set(notes.map((note) => note.course_code).filter(Boolean))].sort(),
-    [notes],
-  );
+  const loadMore = useCallback(() => {
+    if (!hasMore || notesLoading || loadingMoreRef.current || nextOffset === null) {
+      return;
+    }
 
-  const types = useMemo(
-    () => [...new Set(notes.map((note) => note.type).filter(Boolean))].sort(),
-    [notes],
-  );
+    void fetchPage(nextOffset, false);
+  }, [fetchPage, hasMore, nextOffset, notesLoading]);
 
-  const intakes = useMemo(
-    () => [...new Set(notes.map((note) => note.intake).filter(Boolean))].sort(),
-    [notes],
-  );
-
-  const sections = useMemo(
-    () =>
-      [...new Set(notes.map((note) => note.section).filter(Boolean))].sort(
-        (a, b) => Number(a) - Number(b),
-      ),
-    [notes],
-  );
-
-  const fileTypes: FileType[] = ["pdf", "video"];
-
-  // Apply filters and sorting
-  const filteredNotes = useMemo(() => {
-    const filtered = notes.filter((note) => {
-      const courseMatch =
-        selectedCourses.length === 0 ||
-        selectedCourses.includes(note.course_code);
-
-      const typeMatch =
-        selectedTypes.length === 0 ||
-        selectedTypes.includes(note.type);
-
-      const intakeMatch =
-        selectedIntakes.length === 0 ||
-        selectedIntakes.includes(note.intake);
-
-      const sectionMatch =
-        selectedSections.length === 0 ||
-        selectedSections.includes(note.section);
-
-      const fileTypeMatch =
-        selectedFileTypes.length === 0 ||
-        (note.file_type != null &&
-          selectedFileTypes.includes(note.file_type));
-
-      const rating = Number(note.rating_avg) || 0;
-
-      const ratingMatch =
-        minimumRating === null || rating >= minimumRating;
-
-      return (
-        courseMatch &&
-        typeMatch &&
-        intakeMatch &&
-        sectionMatch &&
-        fileTypeMatch &&
-        ratingMatch
-      );
-    });
-
-    return [...filtered].sort((a, b) => {
-      const dateA = new Date(a.created_at).getTime();
-      const dateB = new Date(b.created_at).getTime();
-
-      return sortOrder === "newest" ? dateB - dateA : dateA - dateB;
-    });
-  }, [
-    notes,
-    selectedCourses,
-    selectedTypes,
-    selectedIntakes,
-    selectedSections,
-    selectedFileTypes,
-    minimumRating,
-    sortOrder,
-  ]);
-
-  // Reset visible note count when filters change
   useEffect(() => {
-    setShown(4);
-  }, [
-    feedMode,
-    selectedCourses,
-    selectedTypes,
-    selectedIntakes,
-    selectedSections,
-    selectedFileTypes,
-    minimumRating,
-    sortOrder,
-  ]);
+    const sentinel = sentinelRef.current;
+    if (!sentinel || !hasMore || notesLoading || loadingMore) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((entry) => entry.isIntersecting)) loadMore();
+      },
+      { rootMargin: "240px" },
+    );
+
+    observer.observe(sentinel);
+    return () => observer.disconnect();
+  }, [hasMore, loadMore, loadingMore, notes.length, notesLoading]);
+
+  const courses = filterOptions.courses;
+  const types = filterOptions.types;
+  const intakes = filterOptions.intakes;
+  const sections = useMemo(
+    () => [...filterOptions.sections].sort((a, b) => Number(a) - Number(b)),
+    [filterOptions.sections],
+  );
+  const fileTypes: FileType[] = filterOptions.file_types.length
+    ? filterOptions.file_types
+    : ["pdf", "video"];
 
   const toggleFilter = (
     value: string,
@@ -302,9 +323,7 @@ function Feed() {
     setSelected: Dispatch<SetStateAction<string[]>>,
   ) => {
     setSelected((previous) =>
-      previous.includes(value)
-        ? previous.filter((item) => item !== value)
-        : [...previous, value],
+      previous.includes(value) ? previous.filter((item) => item !== value) : [...previous, value],
     );
   };
 
@@ -337,34 +356,27 @@ function Feed() {
   const activeChips: { label: string; remove: () => void }[] = [
     ...selectedCourses.map((v) => ({
       label: v,
-      remove: () =>
-        toggleFilter(v, selectedCourses, setSelectedCourses),
+      remove: () => toggleFilter(v, selectedCourses, setSelectedCourses),
     })),
 
     ...selectedTypes.map((v) => ({
       label: v,
-      remove: () =>
-        toggleFilter(v, selectedTypes, setSelectedTypes),
+      remove: () => toggleFilter(v, selectedTypes, setSelectedTypes),
     })),
 
     ...selectedIntakes.map((v) => ({
       label: `Intake ${v}`,
-      remove: () =>
-        toggleFilter(v, selectedIntakes, setSelectedIntakes),
+      remove: () => toggleFilter(v, selectedIntakes, setSelectedIntakes),
     })),
 
     ...selectedSections.map((v) => ({
       label: `Section ${v}`,
-      remove: () =>
-        toggleFilter(v, selectedSections, setSelectedSections),
+      remove: () => toggleFilter(v, selectedSections, setSelectedSections),
     })),
 
     ...selectedFileTypes.map((v) => ({
       label: v.toUpperCase(),
-      remove: () =>
-        setSelectedFileTypes((previous) =>
-          previous.filter((item) => item !== v),
-        ),
+      remove: () => setSelectedFileTypes((previous) => previous.filter((item) => item !== v)),
     })),
 
     ...(minimumRating !== null
@@ -403,9 +415,7 @@ function Feed() {
       </div>
 
       {options.length === 0 ? (
-        <p className="text-xs italic text-muted-foreground/70">
-          No options yet
-        </p>
+        <p className="text-xs italic text-muted-foreground/70">No options yet</p>
       ) : (
         <div className="flex max-h-40 flex-wrap gap-1.5 overflow-y-auto pr-1">
           {options.map((option) => {
@@ -454,13 +464,10 @@ function Feed() {
             <Lock className="h-6 w-6" />
           </div>
 
-          <h1 className="relative text-3xl font-semibold tracking-tight">
-            Members only
-          </h1>
+          <h1 className="relative text-3xl font-semibold tracking-tight">Members only</h1>
 
           <p className="relative mt-3 text-sm leading-relaxed text-muted-foreground">
-            Sign in to unlock curated notes and suggestions from your university
-            community.
+            Sign in to unlock curated notes and suggestions from your university community.
           </p>
 
           <Link
@@ -491,13 +498,11 @@ function Feed() {
             </span>
 
             <h1 className="mt-4 text-4xl font-semibold tracking-tight sm:text-5xl">
-              {greeting},{" "}
-              <span className="text-primary">{firstName}</span>
+              {greeting}, <span className="text-primary">{firstName}</span>
             </h1>
 
             <p className="mt-3 max-w-lg text-sm leading-relaxed text-muted-foreground sm:text-base">
-              Hand-picked notes and suggestions, shared by your university
-              community.
+              Hand-picked notes and suggestions, shared by your university community.
             </p>
           </div>
 
@@ -506,18 +511,14 @@ function Feed() {
               <dt className="text-[11px] uppercase tracking-[0.14em] text-muted-foreground">
                 Notes
               </dt>
-              <dd className="mt-1 text-3xl font-semibold tabular-nums">
-                {notes.length}
-              </dd>
+              <dd className="mt-1 text-3xl font-semibold tabular-nums">{total}</dd>
             </div>
 
             <div>
               <dt className="text-[11px] uppercase tracking-[0.14em] text-muted-foreground">
                 Courses
               </dt>
-              <dd className="mt-1 text-3xl font-semibold tabular-nums">
-                {courses.length}
-              </dd>
+              <dd className="mt-1 text-3xl font-semibold tabular-nums">{courseCount}</dd>
             </div>
           </dl>
         </div>
@@ -589,15 +590,8 @@ function Feed() {
                 {feedMode === "following" ? "Following feed" : "Discover notes"}
               </h2>
               <p className="mt-1 text-xs text-muted-foreground">
-                Showing{" "}
-                <span className="font-semibold text-foreground">
-                  {Math.min(shown, filteredNotes.length)}
-                </span>{" "}
-                of{" "}
-                <span className="font-semibold text-foreground">
-                  {filteredNotes.length}
-                </span>{" "}
-                notes
+                Showing <span className="font-semibold text-foreground">{notes.length}</span> of{" "}
+                <span className="font-semibold text-foreground">{total}</span> notes
               </p>
             </div>
 
@@ -610,7 +604,6 @@ function Feed() {
             >
               <SlidersHorizontal className="h-4 w-4" />
               Filters
-
               {activeFilterCount > 0 && (
                 <span className="rounded-full bg-primary px-1.5 text-[10px] font-semibold text-primary-foreground">
                   {activeFilterCount}
@@ -659,7 +652,7 @@ function Feed() {
               ))
             ) : (
               <>
-                {filteredNotes.slice(0, shown).map((note, i) => (
+                {notes.map((note, i) => (
                   <div
                     key={note.id}
                     className="animate-in fade-in slide-in-from-bottom-2 fill-mode-both transition-transform duration-300 hover:-translate-y-0.5"
@@ -669,7 +662,7 @@ function Feed() {
                   </div>
                 ))}
 
-                {!filteredNotes.length && (
+                {!notes.length && !notesLoading && !error && (
                   <div className="flex flex-col items-center rounded-3xl border border-dashed border-border py-16 text-center">
                     <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-muted text-muted-foreground">
                       {feedMode === "following" ? (
@@ -715,16 +708,31 @@ function Feed() {
             )}
           </div>
 
-          {/* Load more */}
-          {!notesLoading && shown < filteredNotes.length && (
+          {loadingMore && (
+            <div className="mt-6 flex justify-center text-xs text-muted-foreground">
+              <LoaderCircle className="mr-2 size-4 animate-spin" />
+              Loading more notes…
+            </div>
+          )}
+
+          {hasMore && <div ref={sentinelRef} aria-hidden="true" className="h-px" />}
+
+          {hasMore && !notesLoading && (
             <div className="mt-8 flex justify-center">
               <button
                 type="button"
-                onClick={() => setShown((previous) => previous + 4)}
-                className="inline-flex items-center gap-2 rounded-full border border-border bg-card px-6 py-2.5 text-sm font-medium shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md"
+                onClick={loadMore}
+                disabled={loadingMore}
+                className="inline-flex items-center gap-2 rounded-full border border-border bg-card px-6 py-2.5 text-sm font-medium shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md disabled:cursor-wait disabled:opacity-70"
               >
-                <Layers className="h-4 w-4" />
-                Load more · {filteredNotes.length - shown} left
+                {loadingMore ? (
+                  <LoaderCircle className="size-4 animate-spin" />
+                ) : (
+                  <Layers className="h-4 w-4" />
+                )}
+                {loadingMore
+                  ? "Loading more…"
+                  : `Load more · ${Math.max(total - notes.length, 0)} left`}
               </button>
             </div>
           )}
@@ -862,9 +870,7 @@ function Feed() {
               })}
             </div>
 
-            <p className="mt-2 text-xs text-muted-foreground">
-              Select PDF, video, or both.
-            </p>
+            <p className="mt-2 text-xs text-muted-foreground">Select PDF, video, or both.</p>
           </section>
 
           {/* Minimum rating filter */}
@@ -894,20 +900,14 @@ function Feed() {
                     key={rating}
                     type="button"
                     aria-pressed={active}
-                    onClick={() =>
-                      setMinimumRating(active ? null : rating)
-                    }
+                    onClick={() => setMinimumRating(active ? null : rating)}
                     className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium transition-all ${
                       active
                         ? "border-primary bg-primary text-primary-foreground shadow-sm"
                         : "border-border bg-background/60 text-foreground/80 hover:border-primary/40"
                     }`}
                   >
-                    <Star
-                      className={`h-3 w-3 ${
-                        active ? "fill-current" : ""
-                      }`}
-                    />
+                    <Star className={`h-3 w-3 ${active ? "fill-current" : ""}`} />
                     {rating}+
                   </button>
                 );

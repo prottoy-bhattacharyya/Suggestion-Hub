@@ -53,69 +53,71 @@ export function PdfCard({ pdf }: { pdf: Pdf }) {
   const uploader = userById(pdf.uploaderId);
 
   return (
-    <article className="paper-card group p-5">
-      <div className="flex items-start gap-4">
-        <div className="grid h-12 w-10 shrink-0 place-items-center rounded-sm bg-primary text-primary-foreground">
-          <FileText className="h-5 w-5" />
-        </div>
-
-        <div className="min-w-0 flex-1">
-          <div className="mb-2 flex flex-wrap items-center gap-2">
-            <span className="chip bg-accent">{pdf.course}</span>
-
-            <span
-              className={`chip ${
-                pdf.type === "note"
-                  ? "bg-secondary text-secondary-foreground"
-                  : "bg-highlight/25 text-foreground"
-              }`}
-            >
-              {pdf.type}
-            </span>
-
-            {pdf.status !== "approved" && <StatusPill status={pdf.status} />}
+    <Link to="/pdf/$id" params={{ id: pdf.id }} className="no-underline">
+      <article className="paper-card group p-5">
+        <div className="flex items-start gap-4">
+          <div className="grid h-12 w-10 shrink-0 place-items-center rounded-sm bg-primary text-primary-foreground">
+            <FileText className="h-5 w-5" />
           </div>
 
-          <h3 className="font-display text-lg leading-snug">
-            <Link
-              to="/pdf/$id"
-              params={{ id: pdf.id }}
-              className="hover:underline"
-            >
-              {pdf.title}
-            </Link>
-          </h3>
+          <div className="min-w-0 flex-1">
+            <div className="mb-2 flex flex-wrap items-center gap-2">
+              <span className="chip bg-accent">{pdf.course}</span>
 
-          <p className="mt-1 text-sm text-muted-foreground">
-            {shortDescription(pdf.description)}
-          </p>
-
-          <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-muted-foreground">
-            <span>
-              by{" "}
-              <Link
-                to="/profile/$id"
-                params={{ id: uploader.id }}
-                className="font-medium text-foreground hover:underline"
+              <span
+                className={`chip ${
+                  pdf.type === "note"
+                    ? "bg-secondary text-secondary-foreground"
+                    : "bg-highlight/25 text-foreground"
+                }`}
               >
-                {uploader.name}
+                {pdf.type}
+              </span>
+
+              {pdf.status !== "approved" && <StatusPill status={pdf.status} />}
+            </div>
+
+            <h3 className="font-display text-lg leading-snug">
+              <Link
+                to="/pdf/$id"
+                params={{ id: pdf.id }}
+                className="hover:underline"
+              >
+                {pdf.title}
               </Link>
-            </span>
+            </h3>
 
-            <span>{pdf.date}</span>
+            <p className="mt-1 text-sm text-muted-foreground">
+              {shortDescription(pdf.description)}
+            </p>
 
-            <span>{pdf.pages} pages</span>
+            <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-muted-foreground">
+              <span>
+                by{" "}
+                <Link
+                  to="/profile/$id"
+                  params={{ id: uploader.id }}
+                  className="font-medium text-foreground hover:underline"
+                >
+                  {uploader.name}
+                </Link>
+              </span>
 
-            <Stars value={pdf.rating} />
+              <span>{pdf.date}</span>
 
-            <span>
-              ({pdf.ratingCount}{" "}
-              {pdf.ratingCount === 1 ? "rating" : "ratings"})
-            </span>
+              <span>{pdf.pages} pages</span>
+
+              <Stars value={pdf.rating} />
+
+              <span>
+                ({pdf.ratingCount}{" "}
+                {pdf.ratingCount === 1 ? "rating" : "ratings"})
+              </span>
+            </div>
           </div>
         </div>
-      </div>
-    </article>
+      </article>
+    </Link>
   );
 }
 
@@ -127,15 +129,16 @@ export function NoteCard({ note }: { note: Note }) {
     : "Unknown date";
 
   return (
-    <article className="paper-card group p-5">
-      <div className="flex items-start gap-4">
-        <div className="grid h-12 w-10 shrink-0 place-items-center rounded-sm bg-primary text-primary-foreground">
-          {note.file_type === "video" ? (
-            <Play className="h-5 w-5" />
-          ) : (
-            <FileText className="h-5 w-5" />
-          )}
-        </div>
+    <Link to="/pdf/$id" params={{ id: String(note.id) }} className="no-underline">
+      <article className="paper-card group p-5">
+        <div className="flex items-start gap-4">
+          <div className="grid h-12 w-10 shrink-0 place-items-center rounded-sm bg-primary text-primary-foreground">
+            {note.file_type === "video" ? (
+              <Play className="h-5 w-5" />
+            ) : (
+              <FileText className="h-5 w-5" />
+            )}
+          </div>
 
         <div className="min-w-0 flex-1">
           <div className="mb-2 flex flex-wrap items-center gap-2">
@@ -191,32 +194,8 @@ export function NoteCard({ note }: { note: Note }) {
               {note.rating_count === 1 ? "rating" : "ratings"})
             </span>
           </div>
-
-          <div className="mt-4">
-            <div className="flex flex-wrap gap-2">
-              <Link
-                to="/pdf/$id"
-                params={{ id: String(note.id) }}
-                className="btn-primary inline-flex items-center gap-2"
-              >
-                <ExternalLink size={16} />
-                {note.file_type === "video" ? "View video" : "View PDF"}
-              </Link>
-
-              {note.file_url && (
-                <a
-                  href={note.file_url}
-                  download
-                  className="btn-ghost inline-flex items-center gap-2"
-                >
-                  <Download size={16} />
-                  Download
-                </a>
-              )}
-            </div>
-          </div>
         </div>
       </div>
     </article>
-  );
-}
+  </Link>
+)};

@@ -110,9 +110,11 @@ Uploaded notes do not appear in feeds until a teacher approves them.
 ## 5. Browsing, feeds, and discovery
 
 **Feeds** (`/feeds`): two modes — all approved notes (newest first) and a
-"following" feed showing approved notes from people you follow. Filter by
-course, type, intake, section, and PDF vs video; sort newest/oldest. Login is
-required, with a friendly login prompt instead of a hard error.
+"following" feed showing approved notes from people you follow. Documents load
+5 at a time as you scroll, with a Load more fallback. Filter by course, type,
+intake, section, and PDF vs video; sort newest/oldest. Filters and sorting are
+applied by the API across all notes, and totals/course counts stay accurate.
+Login is required, with a friendly login prompt instead of a hard error.
 
 **Shared note cards** show the title, course code, uploader, date, rating,
 review status, and either a Play icon ("View video") or a document icon

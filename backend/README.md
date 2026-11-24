@@ -423,13 +423,22 @@ This URL is an alias that points to the same `me` view.
 
 ## Feeds
 
+Both feed endpoints return approved notes in pages of 5 by default and share the same query parameters:
+
+- `limit`: page size, default `5`, maximum `20`.
+- `offset`: number of notes to skip, default `0`.
+- `courses`, `types`, `intakes`, `sections`, `file_types`: comma-separated exact values.
+- `min_rating`: minimum rating average from `0` to `5`.
+- `sort`: `newest` (default) or `oldest`.
+
+Each note includes `avatar_url`, `uploader_avatar_url`, and an absolute `file_url`.
+
 ### 10. Approved notes feed
 
 - **Url:** `/feeds/get_feeds/`
-- **Request type:** `GET` (the view does not explicitly check the method)
-- **Request parameters:** None
+- **Request type:** `GET`
+- **Request parameters:** the shared pagination/filter parameters above.
 - **Request body:** None
-- **Response body:**
 
 `200 OK`:
 
@@ -452,10 +461,25 @@ This URL is an alias that points to the same `me` view.
       "uploader_id": 3,
       "course_code": "CSE220",
       "uploader_name": "Student Name",
+      "avatar_url": "http://127.0.0.1:8000/accounts/avatar/3/",
+      "uploader_avatar_url": "http://127.0.0.1:8000/accounts/avatar/3/",
       "file_type": "pdf",
       "file_url": "http://127.0.0.1:8000/notes/10/file/"
     }
-  ]
+  ],
+  "total": 23,
+  "course_count": 6,
+  "filter_options": {
+    "courses": ["CSE220"],
+    "types": ["note"],
+    "intakes": ["24"],
+    "sections": ["A"],
+    "file_types": ["pdf"]
+  },
+  "limit": 5,
+  "offset": 0,
+  "next_offset": 5,
+  "has_more": true
 }
 ```
 
@@ -468,54 +492,18 @@ This URL is an alias that points to the same `me` view.
 }
 ```
 
-Only approved notes are returned.
+Only approved notes are returned. `total` and `course_count` reflect the applied filters, while `filter_options` lists all values available in the feed so filter controls stay complete.
 
 ---
 
 ### 11. Following feed
 
 - **Url:** `/feeds/get_feeds_by_following/`
-- **Request type:** `GET` (the view does not explicitly check the method)
-- **Request parameters:** None
+- **Request type:** `GET`
+- **Request parameters:** the shared pagination/filter parameters above.
 - **Request body:** None
-- **Response body:**
 
-`200 OK`:
-
-```json
-{
-  "status": "success",
-  "notes": [
-    {
-      "id": 10,
-      "title": "Data Structures Midterm Notes",
-      "description": "Chapter 1 to 5",
-      "type": "note",
-      "intake": "24",
-      "section": "A",
-      "rating_avg": 4.5,
-      "rating_count": 2,
-      "created_at": "2026-11-21",
-      "review_status": "approved",
-      "uploader_name": "Student Name",
-      "review_comment": "Good notes.",
-      "file_type": "video",
-      "file_url": "http://127.0.0.1:8000/notes/10/file/"
-    }
-  ]
-}
-```
-
-`401 Unauthorized`:
-
-```json
-{
-  "status": "failed",
-  "error": "You need to login first."
-}
-```
-
-Only approved notes uploaded by users that the session user follows are returned.
+The response uses the same envelope as the approved notes feed. Only approved notes uploaded by users that the session user follows are returned.
 
 ---
 

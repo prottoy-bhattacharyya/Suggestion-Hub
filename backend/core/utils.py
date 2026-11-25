@@ -59,6 +59,19 @@ def avatar_absolute_path(relative_path):
     return path
 
 
+def note_absolute_path(relative_path):
+    if not relative_path:
+        return None
+    normalized = str(relative_path).replace("\\", "/")
+    if os.path.isabs(normalized) or ".." in normalized.split("/"):
+        return None
+    root = os.path.realpath(settings.BASE_DIR)
+    path = os.path.realpath(os.path.join(root, normalized))
+    if os.path.commonpath([root, path]) != root:
+        return None
+    return path
+
+
 def avatar_url(request, user_id, avatar):
     if not avatar:
         return None

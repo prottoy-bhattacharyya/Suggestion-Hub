@@ -11,4 +11,5 @@ urlpatterns = [
     path('<int:note_id>/views/daily/', views.note_view_history, name='note-view-history'),
     path('<int:note_id>/rate/', views.note_rate, name='note-rate'),
     path('<int:note_id>/report/', views.note_report, name='note-report'),
+    path('<int:note_id>/delete/', views.note_delete, name='note-delete'),
 ]

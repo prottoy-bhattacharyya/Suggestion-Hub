@@ -1,4 +1,4 @@
-import { createFileRoute, Link, notFound } from "@tanstack/react-router";
+import { createFileRoute, Link, notFound, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import {
   ArrowLeft,
@@ -20,10 +20,21 @@ import {
   X,
   RotateCcw,
   ArrowRight,
+  Trash2,
 } from "lucide-react";
 import { StatusPill, Stars } from "@/components/PdfCard";
 import { UserAvatar } from "@/components/UserAvatar";
-import { getCSRFToken } from "@/lib/utils";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { deleteNote, getCSRFToken } from "@/lib/utils";
 import api from "@/lib/api";
 import axios from "axios";
 
@@ -510,6 +521,7 @@ function CommentsSection({ noteId }: { noteId: number }) {
 
 function PdfPage() {
   const loader = Route.useLoaderData();
+  const navigate = useNavigate();
   const note: NoteDetail = loader.note;
 
   const [ratingAvg, setRatingAvg] = useState(note.rating_avg);
@@ -527,6 +539,9 @@ function PdfPage() {
   const [reportSent, setReportSent] = useState(false);
   const [reportLoading, setReportLoading] = useState(false);
   const [reportError, setReportError] = useState("");
+  const [deleteLoading, setDeleteLoading] = useState(false);
+  const [deleteError, setDeleteError] = useState("");
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [aiOpen, setAiOpen] = useState(false);
   const [aiQuestion, setAiQuestion] = useState("");
   const [aiLoading, setAiLoading] = useState(false);
@@ -644,6 +659,38 @@ function PdfPage() {
       }
     } finally {
       setReportLoading(false);
+    }
+  }
+
+  async function handleDelete() {
+    if (!note.is_owner || deleteLoading) return;
+
+    setDeleteLoading(true);
+    setDeleteError("");
+
+    try {
+      await deleteNote(note.id);
+      setDeleteDialogOpen(false);
+      navigate({
+        to: "/profile/$id",
+        params: { id: String(note.uploader_id) },
+      });
+    } catch (error: unknown) {
+      console.error("Delete failed:", error);
+
+      if (axios.isAxiosError(error)) {
+        setDeleteError(
+          error.response?.data?.error ??
+            error.response?.data?.detail ??
+            "Could not delete this note. Please try again.",
+        );
+      } else if (error instanceof Error) {
+        setDeleteError(error.message);
+      } else {
+        setDeleteError("An unexpected error occurred.");
+      }
+    } finally {
+      setDeleteLoading(false);
     }
   }
 
@@ -927,6 +974,69 @@ function PdfPage() {
                 <Download className="h-4 w-4" /> Download
               </a>
             </div>
+
+            {note.is_owner && (
+              <div className="mt-3">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setDeleteError("");
+                    setDeleteDialogOpen(true);
+                  }}
+                  disabled={deleteLoading}
+                  className="flex w-full items-center justify-center gap-2 rounded-full border border-destructive/30 bg-destructive/5 px-4 py-2.5 text-sm font-medium text-destructive transition-colors hover:bg-destructive/10 disabled:opacity-50"
+                >
+                  <Trash2 className="h-4 w-4" />
+                  Delete this note
+                </button>
+
+                <AlertDialog
+                  open={deleteDialogOpen}
+                  onOpenChange={(open) => {
+                    if (!deleteLoading) setDeleteDialogOpen(open);
+                  }}
+                >
+                  <AlertDialogContent>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle>Delete this note?</AlertDialogTitle>
+                      <AlertDialogDescription>
+                        This permanently deletes the note and its ratings, comments, reviews, and
+                        view history. The uploaded file will also be removed. This action cannot be
+                        undone.
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+
+                    {deleteError && (
+                      <p
+                        role="alert"
+                        className="rounded-xl border border-destructive/30 bg-destructive/5 p-2.5 text-xs text-destructive"
+                      >
+                        {deleteError}
+                      </p>
+                    )}
+
+                    <AlertDialogFooter>
+                      <AlertDialogCancel disabled={deleteLoading}>Cancel</AlertDialogCancel>
+                      <AlertDialogAction
+                        onClick={(event) => {
+                          event.preventDefault();
+                          handleDelete();
+                        }}
+                        disabled={deleteLoading}
+                        className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                      >
+                        {deleteLoading ? (
+                          <LoaderCircle className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <Trash2 className="h-4 w-4" />
+                        )}
+                        {deleteLoading ? "Deleting..." : "Delete note"}
+                      </AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
+              </div>
+            )}
           </div>
 
           {/* Ask AI panel */}

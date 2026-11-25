@@ -1075,6 +1075,50 @@ When nothing is counted, `counted` is `false` and `reason` is `owner`, `not_appr
 
 ---
 
+### 17d. Delete a note
+
+- **Url:** `/notes/<note_id>/delete/`
+- **Request type:** `POST`
+- **Request parameters:** Path `note_id` (integer, required).
+- **Request body:** `application/json`; an empty object `{}` is fine.
+- **Auth:** login session plus `X-CSRFToken` header; the uploader only.
+- **Behavior:** Hard-deletes the note. MySQL cascades remove reviews, ratings, comments, daily views and reports. Ranks are recalculated for the uploader and every teacher who reviewed the note. The local file is removed after the DB commit only when no other note references the same stored path.
+
+`200 OK`:
+
+```json
+{
+  "status": "success",
+  "message": "Note deleted.",
+  "note_id": 12,
+  "file_deleted": true
+}
+```
+
+`file_deleted` is `false` when the file is missing or another note shares the same stored path.
+
+`401 Unauthorized`:
+
+```json
+{
+  "status": "failed",
+  "error": "You need to login first."
+}
+```
+
+`403 Forbidden`:
+
+```json
+{
+  "status": "error",
+  "error": "You can only delete your own notes."
+}
+```
+
+`404 Not Found` and `405 Method Not Allowed` use the standard error shapes.
+
+---
+
 ## Reviews / Teacher moderation
 
 ### 18. Submit a review decision

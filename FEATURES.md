@@ -248,9 +248,13 @@ risky areas:
   `/search` is dead code with a hardcoded fake answer.
 - Notes with Windows-style backslash paths need the one-time DB repair noted in
   section 3 to display under Docker/Linux.
-- No automated tests yet; the `tests.py` files are scaffolds.
-- Notifications, password reset, note edit/delete, and pagination exist in the
-  design but are not implemented.
+- Automated test coverage is partial: feeds, accounts/settings, and note deletion
+  have backend tests; most other `tests.py` files are still scaffolds.
+- Uploaders can hard-delete their own notes from the note detail page or profile.
+  Deletion cascades related records, recalculates affected ranks, and removes the
+  local file when no other note references the same path.
+- Notifications, password reset, and note edit exist in the design but are not
+  implemented.
 
 ---
 

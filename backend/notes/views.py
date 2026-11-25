@@ -43,8 +43,12 @@ from django.http import FileResponse, HttpResponse, JsonResponse
 from django.views.decorators.clickjacking import xframe_options_exempt
 
 from .utils import getFileHash, save_file
-from core.utils import avatar_url, get_db_connection
-from rankings.service import rebuild_rank_positions, recalculate_user_rank
+from core.utils import avatar_url, get_db_connection, note_absolute_path
+from rankings.service import (
+    rebuild_rank_positions,
+    recalculate_user_rank,
+    recalculate_users_ranks,
+)
 
 # * ----------------------------------------------------------------------
 # * Constants
@@ -1363,4 +1367,94 @@ def note_report(request, note_id):
     return JsonResponse(
         {'status': 'success', 'message': 'Report sent to admins.', 'report_id': report_id},
         status=201,
+    )
+
+
+def note_delete(request, note_id):
+    if request.method != 'POST':
+        return JsonResponse({'status': 'error', 'error': 'Invalid request method'}, status=405)
+
+    session_user = _get_session_user(request)
+    if not session_user:
+        return JsonResponse(
+            {"status": "failed", "error": "You need to login first."},
+            status=401,
+        )
+
+    conn = get_db_connection()
+    file_to_delete = None
+    try:
+        with conn.cursor() as cursor:
+            cursor.execute(
+                """
+                SELECT n.uploader_id, n.file,
+                       (SELECT GROUP_CONCAT(DISTINCT r.teacher_id)
+                        FROM reviews r WHERE r.note_id = n.id)
+                FROM notes n
+                WHERE n.id = %s
+                """,
+                (note_id,),
+            )
+            row = cursor.fetchone()
+            if row is None:
+                return JsonResponse({'status': 'error', 'error': 'Note not found'}, status=404)
+
+            uploader_id, file, teacher_ids_raw = row
+            if session_user.get('id') != uploader_id:
+                return JsonResponse(
+                    {'status': 'error', 'error': 'You can only delete your own notes.'},
+                    status=403,
+                )
+
+            teacher_ids = [
+                int(value)
+                for value in (teacher_ids_raw or '').split(',')
+                if value
+            ]
+            cursor.execute("DELETE FROM notes WHERE id = %s", (note_id,))
+            if cursor.rowcount != 1:
+                conn.rollback()
+                return JsonResponse({'status': 'error', 'error': 'Note not found'}, status=404)
+
+            recalculate_users_ranks(
+                [uploader_id] + teacher_ids,
+                cursor=cursor,
+                rebuild=True,
+            )
+            conn.commit()
+            file_to_delete = file
+    except Exception as e:
+        conn.rollback()
+        return JsonResponse({'status': 'error', 'error': str(e)}, status=500)
+    finally:
+        conn.close()
+
+    file_deleted = False
+    if file_to_delete:
+        absolute_path = note_absolute_path(file_to_delete)
+        if absolute_path and os.path.isfile(absolute_path):
+            share_conn = get_db_connection()
+            try:
+                with share_conn.cursor() as cursor:
+                    cursor.execute(
+                        "SELECT COUNT(*) FROM notes WHERE file = %s",
+                        (file_to_delete,),
+                    )
+                    if cursor.fetchone()[0] == 0:
+                        try:
+                            os.remove(absolute_path)
+                            file_deleted = True
+                        except OSError:
+                            file_deleted = False
+            finally:
+                share_conn.close()
+
+    return JsonResponse(
+        {
+            'status': 'success',
+            'message': 'Note deleted.',
+            'note_id': note_id,
+            'file_deleted': file_deleted,
+        },
+        status=200,
     )

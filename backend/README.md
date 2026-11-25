@@ -834,6 +834,7 @@ Content-Range: bytes */<file-size>
     "review_status": "approved",
     "uploader_id": 3,
     "uploader_name": "Student Name",
+    "course_id": 4,
     "course_code": "CSE220",
     "is_owner": false,
     "my_rating": 4,
@@ -1116,6 +1117,48 @@ When nothing is counted, `counted` is `false` and `reason` is `owner`, `not_appr
 ```
 
 `404 Not Found` and `405 Method Not Allowed` use the standard error shapes.
+
+---
+
+### 17e. Update a note
+
+- **Url:** `/notes/<note_id>/update/`
+- **Request type:** `POST`
+- **Request parameters:** Path `note_id` (integer, required).
+- **Request body:** `multipart/form-data` with `title` (1-200 chars), `description` (optional, max 2000 chars), `type` (`note` or `suggestion`), `intake` (1-10), `section` (optional, max 10 chars), `course_id` (existing course id), and optional `file` (`.pdf`, `.mp4`, `.webm`, `.mov`).
+- **Auth:** login session plus `X-CSRFToken` header; the uploader only.
+- **Behavior:** Updates only the allowed metadata fields. When `file` is provided, the uploaded bytes are staged to `uploaded_notes/.chunks/`, validated, hashed with SHA-256, moved to `uploaded_notes/<note_id>-<hash[:16]><ext>`, and committed with the metadata update. A hash already used by another note is rejected. The old file is removed after commit only when no other note references the same stored path. Ratings, comments, views, reports and review history are preserved. Approved or rejected notes become `pending` with `approved_at = NULL` and the uploader rank is recalculated; the next teacher decision creates a new review row.
+
+`200 OK`:
+
+```json
+{
+  "status": "success",
+  "message": "Note updated.",
+  "note_id": 12,
+  "file_replaced": true
+}
+```
+
+`file_replaced` is `false` when no file was sent or the uploaded file hash matches the current note hash.
+
+`400 Bad Request` examples:
+
+```json
+{
+  "status": "error",
+  "error": "Title must be between 1 and 200 characters."
+}
+```
+
+```json
+{
+  "status": "error",
+  "error": "This file is already used by another note."
+}
+```
+
+`401 Unauthorized`, `403 Forbidden`, `404 Not Found` and `405 Method Not Allowed` use the standard error shapes.
 
 ---
 

@@ -22,6 +22,7 @@ import { Route as TeacherRouteImport } from './routes/teacher'
 import { Route as UploadRouteImport } from './routes/upload'
 import { Route as PdfIdRouteImport } from './routes/pdf.$id'
 import { Route as ProfileIdRouteImport } from './routes/profile.$id'
+import { Route as PdfIdUpdateRouteImport } from './routes/pdf.$id_.update'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -88,6 +89,11 @@ const ProfileIdRoute = ProfileIdRouteImport.update({
   path: '/profile/$id',
   getParentRoute: () => rootRouteImport,
 } as any)
+const PdfIdUpdateRoute = PdfIdUpdateRouteImport.update({
+  id: '/pdf/$id_/update',
+  path: '/pdf/$id/update',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -103,6 +109,7 @@ export interface FileRoutesByFullPath {
   '/upload': typeof UploadRoute
   '/pdf/$id': typeof PdfIdRoute
   '/profile/$id': typeof ProfileIdRoute
+  '/pdf/$id/update': typeof PdfIdUpdateRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -118,6 +125,7 @@ export interface FileRoutesByTo {
   '/upload': typeof UploadRoute
   '/pdf/$id': typeof PdfIdRoute
   '/profile/$id': typeof ProfileIdRoute
+  '/pdf/$id/update': typeof PdfIdUpdateRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -134,6 +142,7 @@ export interface FileRoutesById {
   '/upload': typeof UploadRoute
   '/pdf/$id': typeof PdfIdRoute
   '/profile/$id': typeof ProfileIdRoute
+  '/pdf/$id_/update': typeof PdfIdUpdateRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -151,6 +160,7 @@ export interface FileRouteTypes {
     | '/upload'
     | '/pdf/$id'
     | '/profile/$id'
+    | '/pdf/$id/update'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -166,6 +176,7 @@ export interface FileRouteTypes {
     | '/upload'
     | '/pdf/$id'
     | '/profile/$id'
+    | '/pdf/$id/update'
   id:
     | '__root__'
     | '/'
@@ -181,6 +192,7 @@ export interface FileRouteTypes {
     | '/upload'
     | '/pdf/$id'
     | '/profile/$id'
+    | '/pdf/$id_/update'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -197,6 +209,7 @@ export interface RootRouteChildren {
   UploadRoute: typeof UploadRoute
   PdfIdRoute: typeof PdfIdRoute
   ProfileIdRoute: typeof ProfileIdRoute
+  PdfIdUpdateRoute: typeof PdfIdUpdateRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -292,6 +305,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ProfileIdRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/pdf/$id_/update': {
+      id: '/pdf/$id_/update'
+      path: '/pdf/$id/update'
+      fullPath: '/pdf/$id/update'
+      preLoaderRoute: typeof PdfIdUpdateRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -309,6 +329,7 @@ const rootRouteChildren: RootRouteChildren = {
   UploadRoute: UploadRoute,
   PdfIdRoute: PdfIdRoute,
   ProfileIdRoute: ProfileIdRoute,
+  PdfIdUpdateRoute: PdfIdUpdateRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

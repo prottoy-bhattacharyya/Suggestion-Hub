@@ -20,23 +20,12 @@ import {
   Users,
   Mail,
   Trophy,
-  Trash2,
 } from "lucide-react";
 
 import { NoteCard, type Note as PdfCardNote } from "@/components/PdfCard";
 import { UserAvatar } from "@/components/UserAvatar";
 
 import { Button } from "@/components/ui/button";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
 import {
   Dialog,
   DialogContent,
@@ -47,7 +36,7 @@ import {
 import api from "@/lib/api";
 import { getSessionUser, notifyAuthChange } from "@/lib/auth";
 import { titleTone } from "@/lib/rankings";
-import { deleteNote, getCSRFToken } from "@/lib/utils";
+import { getCSRFToken } from "@/lib/utils";
 
 type ProfileData = {
   user: {
@@ -189,9 +178,6 @@ function Profile() {
   const [notes, setNotes] = useState<ProfileNote[]>([]);
   const [notesLoading, setNotesLoading] = useState(true);
   const [notesError, setNotesError] = useState("");
-  const [deleteError, setDeleteError] = useState("");
-  const [deletingNoteId, setDeletingNoteId] = useState<number | null>(null);
-  const [noteToDelete, setNoteToDelete] = useState<ProfileNote | null>(null);
 
   const [tab, setTab] = useState<"approved" | "pending" | "rejected">("approved");
 
@@ -565,24 +551,6 @@ function Profile() {
       emptyMessage: "No rejected notes — nice work.",
     },
   }[isMe ? tab : "approved"];
-
-  async function handleDeleteNote() {
-    const note = noteToDelete;
-    if (!isMe || !note || deletingNoteId !== null) return;
-
-    setDeletingNoteId(note.id);
-    setDeleteError("");
-
-    try {
-      await deleteNote(note.id);
-      setNotes((current) => current.filter((item) => item.id !== note.id));
-      setNoteToDelete(null);
-    } catch (error: unknown) {
-      setDeleteError(error instanceof Error ? error.message : "Could not delete the note.");
-    } finally {
-      setDeletingNoteId(null);
-    }
-  }
 
   return (
     <main className="mx-auto max-w-7xl px-4 py-6 sm:px-8 sm:py-10">
@@ -980,63 +948,7 @@ function Profile() {
               {notesError}
             </p>
           )}
-          {!notesLoading && !notesError && (
-            <NotesSection
-              {...sectionProps}
-              showStatus={isMe}
-              onRequestDelete={setNoteToDelete}
-              deletingNoteId={deletingNoteId}
-            />
-          )}
-
-          <AlertDialog
-            open={noteToDelete !== null}
-            onOpenChange={(open) => {
-              if (!open && deletingNoteId === null) {
-                setNoteToDelete(null);
-                setDeleteError("");
-              }
-            }}
-          >
-            <AlertDialogContent>
-              <AlertDialogHeader>
-                <AlertDialogTitle>Delete this note?</AlertDialogTitle>
-                <AlertDialogDescription>
-                  Delete “{noteToDelete?.title}”? This permanently removes the note and its ratings,
-                  comments, reviews, and view history. The uploaded file will also be removed. This
-                  action cannot be undone.
-                </AlertDialogDescription>
-              </AlertDialogHeader>
-
-              {deleteError && (
-                <p
-                  role="alert"
-                  className="rounded-xl border border-destructive/30 bg-destructive/5 p-2.5 text-xs text-destructive"
-                >
-                  {deleteError}
-                </p>
-              )}
-
-              <AlertDialogFooter>
-                <AlertDialogCancel disabled={deletingNoteId !== null}>Cancel</AlertDialogCancel>
-                <AlertDialogAction
-                  onClick={(event) => {
-                    event.preventDefault();
-                    handleDeleteNote();
-                  }}
-                  disabled={deletingNoteId !== null}
-                  className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                >
-                  {deletingNoteId !== null ? (
-                    <LoaderCircle className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <Trash2 className="h-4 w-4" />
-                  )}
-                  {deletingNoteId !== null ? "Deleting..." : "Delete note"}
-                </AlertDialogAction>
-              </AlertDialogFooter>
-            </AlertDialogContent>
-          </AlertDialog>
+          {!notesLoading && !notesError && <NotesSection {...sectionProps} showStatus={isMe} />}
         </section>
       </div>
     </main>
@@ -1049,16 +961,12 @@ function NotesSection({
   notes,
   emptyMessage,
   showStatus,
-  onRequestDelete,
-  deletingNoteId,
 }: {
   title: string;
   description: string;
   notes: ProfileNote[];
   emptyMessage: string;
   showStatus: boolean;
-  onRequestDelete: (note: ProfileNote) => void;
-  deletingNoteId: number | null;
 }) {
   return (
     <div className="mt-6">
@@ -1113,24 +1021,9 @@ function NotesSection({
                       <statusConfig.Icon className="size-3.5" aria-hidden="true" />
                       {statusConfig.label}
                     </span>
-                    <div className="flex items-center gap-2">
-                      {note.course_code && (
-                        <span className="text-xs text-muted-foreground">{note.course_code}</span>
-                      )}
-                      <button
-                        type="button"
-                        onClick={() => onRequestDelete(note)}
-                        disabled={deletingNoteId === note.id}
-                        aria-label={`Delete ${note.title}`}
-                        className="inline-flex size-7 items-center justify-center rounded-full border border-destructive/30 text-destructive transition-colors hover:bg-destructive/10 disabled:opacity-50"
-                      >
-                        {deletingNoteId === note.id ? (
-                          <LoaderCircle className="size-3.5 animate-spin" />
-                        ) : (
-                          <Trash2 className="size-3.5" />
-                        )}
-                      </button>
-                    </div>
+                    {note.course_code && (
+                      <span className="text-xs text-muted-foreground">{note.course_code}</span>
+                    )}
                   </div>
                 )}
                 <NoteCard note={cardNote} />

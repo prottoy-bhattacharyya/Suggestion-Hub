@@ -45,3 +45,28 @@ export async function deleteNote(noteId: number): Promise<DeleteNoteResponse> {
 
   return data;
 }
+
+export type UpdateNoteResponse = {
+  status: string;
+  message?: string;
+  note_id?: number;
+  file_replaced?: boolean;
+  error?: string;
+};
+
+export async function updateNote(noteId: number, payload: FormData): Promise<UpdateNoteResponse> {
+  const csrfToken = await getCSRFToken();
+
+  const { data } = await api.post<UpdateNoteResponse>(`/notes/${noteId}/update/`, payload, {
+    headers: {
+      Accept: "application/json",
+      ...(csrfToken ? { "X-CSRFToken": csrfToken } : {}),
+    },
+  });
+
+  if (data.status !== "success") {
+    throw new Error(data.error ?? "Could not update the note.");
+  }
+
+  return data;
+}

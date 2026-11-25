@@ -35,6 +35,7 @@ import os
 import re
 import hashlib
 import shutil
+import uuid
 from datetime import date, timedelta
 from pathlib import Path
 
@@ -792,7 +793,7 @@ def note_detail(request, note_id):
             SELECT n.id, n.title, n.description, n.type, n.intake, n.section,
                     n.rating_avg, n.rating_count, n.created_at, n.review_status,
                     n.uploader_id, u.full_name AS uploader_name, u.avatar,
-                    c.code AS course_code, n.file_type, n.view_count
+                    n.course_id, c.code AS course_code, n.file_type, n.view_count
             FROM notes n
             LEFT JOIN users u ON n.uploader_id = u.id
             LEFT JOIN courses c ON n.course_id = c.id
@@ -815,7 +816,7 @@ def note_detail(request, note_id):
     (
         id_, title, description, type_, intake, section,
         rating_avg, rating_count, created_at, review_status,
-        uploader_id, uploader_name, uploader_avatar, course_code, file_type, view_count,
+        uploader_id, uploader_name, uploader_avatar, course_id, course_code, file_type, view_count,
     ) = row
 
     # Pending notes are only visible to their uploader, teachers and admins.
@@ -883,6 +884,7 @@ def note_detail(request, note_id):
                 'uploader_id': uploader_id,
                 'uploader_name': uploader_name,
                 'uploader_avatar_url': avatar_url(request, uploader_id, uploader_avatar),
+                'course_id': course_id,
                 'course_code': course_code,
                 # The frontend uses this to hide the "rate" button on your own notes.
                 'is_owner': session_user.get('id') == uploader_id,
@@ -1455,6 +1457,267 @@ def note_delete(request, note_id):
             'message': 'Note deleted.',
             'note_id': note_id,
             'file_deleted': file_deleted,
+        },
+        status=200,
+    )
+
+
+def note_update(request, note_id):
+    if request.method != 'POST':
+        return JsonResponse({'status': 'error', 'error': 'Invalid request method'}, status=405)
+
+    session_user = _get_session_user(request)
+    if not session_user:
+        return JsonResponse(
+            {"status": "failed", "error": "You need to login first."},
+            status=401,
+        )
+
+    title = (request.POST.get('title') or '').strip()
+    description = (request.POST.get('description') or '').strip()
+    type_ = (request.POST.get('type') or '').strip()
+    intake_raw = (request.POST.get('intake') or '').strip()
+    section = (request.POST.get('section') or '').strip()
+    course_raw = (request.POST.get('course_id') or '').strip()
+
+    if not title or len(title) > 200:
+        return JsonResponse(
+            {'status': 'error', 'error': 'Title must be between 1 and 200 characters.'},
+            status=400,
+        )
+    if len(description) > 2000:
+        return JsonResponse(
+            {'status': 'error', 'error': 'Description cannot exceed 2000 characters.'},
+            status=400,
+        )
+    if type_ not in ('note', 'suggestion'):
+        return JsonResponse(
+            {'status': 'error', 'error': 'Type must be "note" or "suggestion".'},
+            status=400,
+        )
+
+    try:
+        intake = int(intake_raw)
+    except (TypeError, ValueError):
+        return JsonResponse(
+            {'status': 'error', 'error': 'Intake must be a number.'},
+            status=400,
+        )
+
+    if section and len(section) > 10:
+        return JsonResponse(
+            {'status': 'error', 'error': 'Section cannot exceed 10 characters.'},
+            status=400,
+        )
+
+    try:
+        course_id = int(course_raw)
+    except (TypeError, ValueError):
+        return JsonResponse(
+            {'status': 'error', 'error': 'Choose a valid course.'},
+            status=400,
+        )
+    if course_id <= 0:
+        return JsonResponse(
+            {'status': 'error', 'error': 'Choose a valid course.'},
+            status=400,
+        )
+
+    uploaded_file = request.FILES.get('file')
+    conn = get_db_connection()
+    staging_path = None
+    final_path = None
+    old_file = None
+    new_file_relative = None
+    file_replaced = False
+    committed = False
+
+    try:
+        with conn.cursor() as cursor:
+            cursor.execute(
+                """
+                SELECT uploader_id, file, file_hash, review_status, approved_at
+                FROM notes WHERE id = %s
+                """,
+                (note_id,),
+            )
+            row = cursor.fetchone()
+            if row is None:
+                return JsonResponse({'status': 'error', 'error': 'Note not found'}, status=404)
+
+            uploader_id, old_file, current_file_hash, current_review_status, current_approved_at = row
+            if session_user.get('id') != uploader_id:
+                return JsonResponse(
+                    {'status': 'error', 'error': 'You can only update your own notes.'},
+                    status=403,
+                )
+
+            cursor.execute("SELECT COUNT(*) FROM courses WHERE id = %s", (course_id,))
+            if not cursor.fetchone()[0]:
+                return JsonResponse(
+                    {'status': 'error', 'error': 'Choose a valid course.'},
+                    status=400,
+                )
+
+            if uploaded_file:
+                extension = os.path.splitext(uploaded_file.name)[1].lower()
+                if extension in PDF_EXTENSIONS:
+                    new_file_type = 'pdf'
+                    max_bytes = MAX_PDF_BYTES
+                elif extension in VIDEO_EXTENSIONS:
+                    new_file_type = 'video'
+                    max_bytes = MAX_VIDEO_BYTES
+                else:
+                    return JsonResponse(
+                        {'status': 'error', 'error': 'Only PDF, MP4, WEBM, and MOV files are allowed.'},
+                        status=400,
+                    )
+
+                if uploaded_file.size > max_bytes:
+                    return JsonResponse(
+                        {'status': 'error', 'error': 'The replacement file is too large.'},
+                        status=400,
+                    )
+
+                staging_dir = Path(settings.BASE_DIR) / 'uploaded_notes' / '.chunks'
+                staging_dir.mkdir(parents=True, exist_ok=True)
+                staging_path = staging_dir / f"replace-{note_id}-{uuid.uuid4().hex}.part"
+                with staging_path.open('wb') as destination:
+                    for chunk in uploaded_file.chunks():
+                        destination.write(chunk)
+
+                digest = hashlib.sha256()
+                with staging_path.open('rb') as source:
+                    for chunk in iter(lambda: source.read(1024 * 1024), b''):
+                        digest.update(chunk)
+                new_file_hash = digest.hexdigest()
+
+                if new_file_hash == current_file_hash:
+                    staging_path.unlink(missing_ok=True)
+                    staging_path = None
+                else:
+                    cursor.execute(
+                        "SELECT id FROM notes WHERE file_hash = %s AND id <> %s",
+                        (new_file_hash, note_id),
+                    )
+                    if cursor.fetchone() is not None:
+                        return JsonResponse(
+                            {'status': 'error', 'error': 'This file is already used by another note.'},
+                            status=400,
+                        )
+
+                    new_file_relative = f"uploaded_notes/{note_id}-{new_file_hash[:16]}{extension}"
+                    final_path = Path(settings.BASE_DIR) / new_file_relative
+                    os.replace(staging_path, final_path)
+                    staging_path = None
+                    file_replaced = True
+
+            status_reset = current_review_status in ('approved', 'rejected')
+            if status_reset:
+                new_review_status = 'pending'
+                new_approved_at = None
+            else:
+                new_review_status = current_review_status
+                new_approved_at = current_approved_at
+
+            if file_replaced:
+                cursor.execute(
+                    """
+                    UPDATE notes
+                    SET title = %s, description = %s, type = %s, intake = %s,
+                        section = %s, course_id = %s, file = %s, file_type = %s,
+                        file_hash = %s, review_status = %s, approved_at = %s
+                    WHERE id = %s AND uploader_id = %s
+                    """,
+                    (
+                        title,
+                        description or None,
+                        type_,
+                        intake,
+                        section or None,
+                        course_id,
+                        new_file_relative,
+                        new_file_type,
+                        new_file_hash,
+                        new_review_status,
+                        new_approved_at,
+                        note_id,
+                        uploader_id,
+                    ),
+                )
+            else:
+                cursor.execute(
+                    """
+                    UPDATE notes
+                    SET title = %s, description = %s, type = %s, intake = %s,
+                        section = %s, course_id = %s, review_status = %s,
+                        approved_at = %s
+                    WHERE id = %s AND uploader_id = %s
+                    """,
+                    (
+                        title,
+                        description or None,
+                        type_,
+                        intake,
+                        section or None,
+                        course_id,
+                        new_review_status,
+                        new_approved_at,
+                        note_id,
+                        uploader_id,
+                    ),
+                )
+
+            if cursor.rowcount != 1:
+                conn.rollback()
+                return JsonResponse({'status': 'error', 'error': 'Note not found'}, status=404)
+
+            if status_reset:
+                recalculate_users_ranks([uploader_id], cursor=cursor, rebuild=True)
+
+            conn.commit()
+            committed = True
+    except Exception as e:
+        conn.rollback()
+        return JsonResponse({'status': 'error', 'error': str(e)}, status=500)
+    finally:
+        if not committed:
+            if staging_path is not None:
+                try:
+                    staging_path.unlink(missing_ok=True)
+                except OSError:
+                    pass
+            if final_path is not None:
+                try:
+                    final_path.unlink(missing_ok=True)
+                except OSError:
+                    pass
+        conn.close()
+
+    if file_replaced and old_file and old_file != new_file_relative:
+        absolute_path = note_absolute_path(old_file)
+        if absolute_path and os.path.isfile(absolute_path):
+            share_conn = get_db_connection()
+            try:
+                with share_conn.cursor() as cursor:
+                    cursor.execute(
+                        "SELECT COUNT(*) FROM notes WHERE file = %s",
+                        (old_file,),
+                    )
+                    if cursor.fetchone()[0] == 0:
+                        try:
+                            os.remove(absolute_path)
+                        except OSError:
+                            pass
+            finally:
+                share_conn.close()
+
+    return JsonResponse(
+        {
+            'status': 'success',
+            'message': 'Note updated.',
+            'note_id': note_id,
+            'file_replaced': file_replaced,
         },
         status=200,
     )

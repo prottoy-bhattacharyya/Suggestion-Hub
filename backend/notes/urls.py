@@ -12,4 +12,5 @@ urlpatterns = [
     path('<int:note_id>/rate/', views.note_rate, name='note-rate'),
     path('<int:note_id>/report/', views.note_report, name='note-report'),
     path('<int:note_id>/delete/', views.note_delete, name='note-delete'),
+    path('<int:note_id>/update/', views.note_update, name='note-update'),
 ]

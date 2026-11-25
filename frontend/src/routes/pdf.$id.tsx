@@ -11,6 +11,8 @@ import {
   Flag,
   GraduationCap,
   LoaderCircle,
+  MoreVertical,
+  Pencil,
   Star,
   Users,
   MessageCircle,
@@ -24,6 +26,12 @@ import {
 } from "lucide-react";
 import { StatusPill, Stars } from "@/components/PdfCard";
 import { UserAvatar } from "@/components/UserAvatar";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -91,6 +99,7 @@ type NoteDetail = {
   uploader_id: number;
   uploader_name: string;
   uploader_avatar_url?: string | null;
+  course_id: number | null;
   course_code: string | null;
   is_owner: boolean;
   my_rating: number;
@@ -662,6 +671,15 @@ function PdfPage() {
     }
   }
 
+  function openUpdatePage() {
+    if (!note.is_owner) return;
+
+    navigate({
+      to: "/pdf/$id/update",
+      params: { id: String(note.id) },
+    });
+  }
+
   async function handleDelete() {
     if (!note.is_owner || deleteLoading) return;
 
@@ -977,18 +995,35 @@ function PdfPage() {
 
             {note.is_owner && (
               <div className="mt-3">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setDeleteError("");
-                    setDeleteDialogOpen(true);
-                  }}
-                  disabled={deleteLoading}
-                  className="flex w-full items-center justify-center gap-2 rounded-full border border-destructive/30 bg-destructive/5 px-4 py-2.5 text-sm font-medium text-destructive transition-colors hover:bg-destructive/10 disabled:opacity-50"
-                >
-                  <Trash2 className="h-4 w-4" />
-                  Delete this note
-                </button>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <button
+                      type="button"
+                      className="flex w-full items-center justify-center gap-2 rounded-full border border-border bg-background px-4 py-2.5 text-sm font-medium transition-colors hover:bg-muted"
+                      aria-label="Note actions"
+                    >
+                      <MoreVertical className="h-4 w-4" />
+                      Note actions
+                    </button>
+                  </DropdownMenuTrigger>
+
+                  <DropdownMenuContent align="end" className="w-52">
+                    <DropdownMenuItem onSelect={openUpdatePage}>
+                      <Pencil className="h-4 w-4" />
+                      Update note info
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      className="text-destructive focus:text-destructive"
+                      onSelect={() => {
+                        setDeleteError("");
+                        setDeleteDialogOpen(true);
+                      }}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                      Delete this note
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
 
                 <AlertDialog
                   open={deleteDialogOpen}
